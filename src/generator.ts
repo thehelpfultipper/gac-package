@@ -3,6 +3,7 @@ import type { Config } from './config.js';
 import { generateWithOllama } from './engines/ollama.js';
 import { generateWithOpenAI } from './engines/openai.js';
 import { generateWithAnthropic } from './engines/anthropic.js';
+import { generateWithGemini } from './engines/gemini.js';
 import { generateHeuristic } from './engines/heuristic.js';
 
 export async function generateCandidates(
@@ -21,24 +22,20 @@ export async function generateCandidates(
     case 'anthropic':
       candidates = await generateWithAnthropic(changes, config);
       break;
+    case 'gemini':
+      candidates = await generateWithGemini(changes, config);
+      break;
     case 'none':
     default:
       candidates = await generateHeuristic(changes, config);
       break;
   }
 
-  // Ensure all candidates meet length requirements
-  return candidates.map(c => enforceMaxLength(c, config.maxLen));
+  // Ensure all candidates have consistent formatting
+  return candidates.map(c => sanitizeCandidate(c));
 }
 
-function enforceMaxLength(message: string, maxLen: number): string {
-  let msg = message.trim().replace(/\.+$/, ''); // Remove trailing periods
-  
-  if (msg.length <= maxLen) return msg;
-
-  // Try to trim at word boundary
-  const trimmed = msg.slice(0, maxLen);
-  const lastSpace = trimmed.lastIndexOf(' ');
-  
-  return lastSpace > maxLen * 0.7 ? trimmed.slice(0, lastSpace) : trimmed;
+function sanitizeCandidate(message: string): string {
+  // Keep the full subject so we never cut mid-thought; the CLI surfaces length warnings.
+  return message.trim().replace(/\.+$/, '');
 }

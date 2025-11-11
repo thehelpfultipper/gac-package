@@ -14,7 +14,7 @@ program
   .version('1.0.0')
   .option('--prefix <text>', 'Prefix for commit message (e.g., "JIRA-123: ")')
   .option('--style <type>', 'Message style: plain|conv|gitmoji|mix', 'mix')
-  .option('--engine <name>', 'Engine: ollama|openai|anthropic|none', 'ollama')
+  .option('--engine <name>', 'Engine: ollama|openai|anthropic|gemini|none', 'ollama')
   .option('--model <name>', 'Model name for Ollama', 'mistral:7b')
   .option('--max-len <number>', 'Max subject length', '72')
   .option('--dry-run', 'Show message without committing')
@@ -119,8 +119,10 @@ program
         const previewMessages = candidates.map((msg, i) => {
           const full = prefix + msg;
           const len = full.length;
-          const indicator = len <= 72 ? pc.green('✓') : pc.yellow('⚠');
-          return `${indicator} ${i + 1}. ${pc.bold(full)} ${pc.dim(`(${len} chars)`)}`;
+          const limit = typeof config.maxLen === 'number' && config.maxLen > 0 ? config.maxLen : null;
+          const indicator = !limit || len <= limit ? pc.green('✓') : pc.yellow('⚠');
+          const lengthLabel = limit ? `(${len}/${limit} chars)` : `(${len} chars)`;
+          return `${indicator} ${i + 1}. ${pc.bold(full)} ${pc.dim(lengthLabel)}`;
         });
 
         const action = await selectWithShortcuts([

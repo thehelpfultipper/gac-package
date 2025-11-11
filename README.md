@@ -130,8 +130,8 @@ gac --max-len 100    # Longer messages (not recommended)
 |------|-------------|---------|
 | `--prefix <text>` | Prefix for all messages | `""` (auto-detect from branch) |
 | `--style <type>` | Message style: plain \| conv \| gitmoji \| mix | `mix` |
-| `--engine <name>` | Engine: ollama \| openai \| anthropic \| none | `ollama` |
-| `--model <name>` | Ollama model name | `mistral:7b` |
+| `--engine <name>` | Engine: ollama \| openai \| anthropic \| gemini \| none | `ollama` |
+| `--model <name>` | Model name (Ollama/OpenAI/Gemini) | `mistral:7b` |
 | `--max-len <num>` | Max subject line length | `72` |
 | `--dry-run` | Preview without committing | `false` |
 
@@ -161,17 +161,50 @@ gac --engine none
 
 The heuristic mode is smart enough that many users prefer it over LLM generation - it's instant and produces high-quality conventional commits.
 
-### Paid Engines (Not in MVP)
+### OpenAI Engine
+
+> Security warning:
+> - Do not commit API keys to version control.
+> - Prefer environment variables; if you use a local `.gacrc`, keep it out of git (this repo's `.gitignore` includes `.gacrc`).
 
 ```bash
 # Requires OPENAI_API_KEY environment variable
-gac --engine openai
+export OPENAI_API_KEY=sk-... && gac --engine openai
 
-# Requires ANTHROPIC_API_KEY environment variable
-gac --engine anthropic
+# Specify a model (examples):
+gac --engine openai --model gpt-4o-mini
+gac --engine openai --model gpt-4o
 ```
 
-**Note:** OpenAI and Anthropic engines are placeholders in the MVP. Use `--engine ollama` or `--engine none`.
+Notes:
+- If `--model` looks like an Ollama model (contains `:`), `gac` defaults to `gpt-4o-mini` for OpenAI.
+ - The same prompt/formatting as Ollama is used; output is exactly 3 one-line subjects.
+ - You can also store the key in config (see Configuration) as `openaiApiKey`.
+
+### Gemini Engine
+
+> Security warning:
+> - Do not commit API keys to version control.
+> - Prefer environment variables; if you use a local `.gacrc`, keep it out of git.
+
+```bash
+# Requires GEMINI_API_KEY or GOOGLE_API_KEY environment variable
+export GEMINI_API_KEY=ya29... && gac --engine gemini
+
+# Specify a model (examples):
+gac --engine gemini --model gemini-1.5-flash
+gac --engine gemini --model gemini-1.5-pro
+```
+
+Notes:
+- If `--model` looks like an Ollama model (contains `:`), `gac` defaults to `gemini-1.5-flash` for Gemini.
+- Same prompt/formatting as other engines; output is exactly 3 one-line subjects.
+- You can also store the key in config (see Configuration) as `geminiApiKey`.
+
+### Anthropic Engine (Placeholder)
+
+The Anthropic engine is not implemented yet in this version.
+Use `--engine ollama` or `--engine none` instead.
 
 ## Configuration
 
@@ -186,6 +219,26 @@ Create `.gacrc` in your project root:
   "style": "conv",
   "maxLen": 72,
   "prefix": ""
+}
+```
+
+For OpenAI, you may include your API key (avoid committing this file):
+
+```json
+{
+  "engine": "openai",
+  "model": "gpt-4o-mini",
+  "openaiApiKey": "sk-..."
+}
+```
+
+For Gemini, you may include your API key (avoid committing this file):
+
+```json
+{
+  "engine": "gemini",
+  "model": "gemini-1.5-flash",
+  "geminiApiKey": "ya29-..."
 }
 ```
 
@@ -211,7 +264,7 @@ Settings are merged in this order (highest priority last):
 1. Default values
 2. `.gacrc` file
 3. `package.json` `"gac"` field
-4. Environment variables (`GAC_PREFIX`, `GAC_MODEL`)
+4. Environment variables (`GAC_PREFIX`, `GAC_MODEL`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`/`GOOGLE_API_KEY`)
 5. Command-line flags (highest priority)
 
 **Example:**
@@ -337,6 +390,10 @@ gac --engine none
 - Switch to smaller model: `--model llama3.2:3b`
 - Keep model loaded: `export OLLAMA_KEEP_ALIVE=1h`
 - Use `--engine none` for instant heuristic mode
+
+**Secrets in config**
+- Prefer environment variables for API keys in shared repos.
+- If you store keys in `.gacrc`, add it to `.gitignore` so it isn’t committed.
 
 ## License
 

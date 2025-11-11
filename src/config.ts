@@ -6,12 +6,16 @@ import { execa } from 'execa';
 export interface Config {
   prefix: string;
   style: 'plain' | 'conv' | 'gitmoji' | 'mix';
-  engine: 'ollama' | 'openai' | 'anthropic' | 'none';
+  engine: 'ollama' | 'openai' | 'anthropic' | 'gemini' | 'none';
   model: string;
   maxLen: number;
   dryRun: boolean;
   // Optional per-run variation seed for deterministic regeneration
   regen?: number;
+  // Optional API keys for paid engines
+  openaiApiKey?: string;
+  anthropicApiKey?: string;
+  geminiApiKey?: string;
 }
 
 export async function loadConfig(cliOptions: any): Promise<Config> {
@@ -67,6 +71,9 @@ export async function loadConfig(cliOptions: any): Promise<Config> {
 
   // Merge: defaults < file config < env vars < CLI options
   const envPrefix = process.env.GAC_PREFIX;
+  const envOpenAI = process.env.OPENAI_API_KEY;
+  const envAnthropic = process.env.ANTHROPIC_API_KEY;
+  const envGemini = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
   return {
     prefix: cliOptions.prefix || envPrefix || fileConfig.prefix || autoPrefix || defaults.prefix,
@@ -75,5 +82,8 @@ export async function loadConfig(cliOptions: any): Promise<Config> {
     model: cliOptions.model || fileConfig.model || defaults.model,
     maxLen: parseInt(cliOptions.maxLen) || fileConfig.maxLen || defaults.maxLen,
     dryRun: cliOptions.dryRun || fileConfig.dryRun || defaults.dryRun,
+    openaiApiKey: cliOptions.openaiApiKey || envOpenAI || (fileConfig as any).openaiApiKey,
+    anthropicApiKey: cliOptions.anthropicApiKey || envAnthropic || (fileConfig as any).anthropicApiKey,
+    geminiApiKey: cliOptions.geminiApiKey || envGemini || (fileConfig as any).geminiApiKey,
   };
 }
