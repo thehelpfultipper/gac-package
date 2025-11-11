@@ -5,7 +5,7 @@ export async function generateWithOllama(
     changes: StagedChanges,
     config: Config
 ): Promise<string[]> {
-    const OLLAMA_API = 'http://localhost:11434/api/generate';
+    const OLLAMA_API = 'http://127.0.0.1:11434/api/generate';
 
     // Build compact context
     const context = buildContext(changes);
@@ -28,42 +28,51 @@ export async function generateWithOllama(
     - No quotes
     - Be specific and concise`;
 
-    const response = await fetch(OLLAMA_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            model: config.model,
-            prompt,
-            stream: false,
-            options: {
-                temperature: 0.7,
-                top_p: 0.9,
-            },
-        }),
-    });
+    try {
+        const response = await fetch(OLLAMA_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: config.model,
+                prompt,
+                stream: false,
+                options: {
+                    temperature: 0.7,
+                    top_p: 0.9,
+                },
+            }),
+        });
 
-    if (!response.ok) {
-        throw new Error(`Ollama request failed: ${response.statusText}`);
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Unknown error');
+            throw new Error(`Ollama HTTP ${response.status}: ${errorText}`);
+        }
+
+        const data = (await response.json()) as unknown;
+        const text = (typeof data === 'object' && data !== null && 'response' in data &&
+            typeof (data as any).response === 'string')
+            ? (data as any).response
+            : '';
+
+        // Parse out the 3 lines
+        const lines = text
+            .split('\n')
+            .map((l: string) => l.replace(/^\d+\.\s*/, '').trim())
+            .filter((l: string) => l.length > 0);
+
+        if (lines.length >= 3) {
+            return lines.slice(0, 3);
+        }
+
+        // Fallback if parsing failed
+        throw new Error('Ollama response format unexpected');
+    } catch (error) {
+        // Re-throw with more context for connection errors
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+            throw new Error(`Cannot connect to Ollama at ${OLLAMA_API}. Is ollama serve running?`);
+        }
+        throw error;
     }
-
-    const data = (await response.json()) as unknown;
-    const text = (typeof data === 'object' && data !== null && 'response' in data &&
-        typeof (data as any).response === 'string')
-        ? (data as any).response
-        : '';
-
-    // Parse out the 3 lines
-    const lines = text
-        .split('\n')
-        .map((l:string) => l.replace(/^\d+\.\s*/, '').trim())
-        .filter((l:string) => l.length > 0);
-
-    if (lines.length >= 3) {
-        return lines.slice(0, 3);
-    }
-
-    // Fallback if parsing failed
-    throw new Error('Ollama response format unexpected');
 }
 
 function buildContext(changes: StagedChanges): string {

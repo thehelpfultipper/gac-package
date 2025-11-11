@@ -29,9 +29,9 @@ program
       // Get staged changes
       const s = p.spinner();
       s.start('Analyzing staged changes');
-      
+
       const changes = await getStagedChanges();
-      
+
       if (!changes.hasStagedFiles) {
         s.stop('No staged changes found');
         p.note(
@@ -51,7 +51,7 @@ program
       const generateNew = async () => {
         const gen = p.spinner();
         gen.start(`Generating with ${currentEngine}`);
-        
+
         try {
           candidates = await generateCandidates(changes, config);
           gen.stop('Generated 3 options');
