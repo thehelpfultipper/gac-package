@@ -77,6 +77,44 @@ program
       let prefix = config.prefix || '';
       let running = true;
 
+      // Helper: allow quick single-key shortcuts while select is open
+      async function selectWithShortcuts(options: { label: string; value: string }[]) {
+        // Allow aborting the prompt when a shortcut is pressed
+        const ac = new AbortController();
+        const selectPromise = p.select({
+          message: 'Choose a commit message:',
+          options,
+          // @ts-ignore - signal is supported at runtime in clack
+          signal: ac.signal as any,
+        }) as Promise<string | symbol>;
+        // Race it against a raw keypress listener for 1/2/3/r/p/q
+        const keyPromise = new Promise<string>((resolve) => {
+          const handler = (chunk: Buffer) => {
+            const str = chunk.toString();
+            // Only react to single, printable characters
+            const key = str.length === 1 ? str : '';
+            if (key && ['1', '2', '3', 'r', 'p', 'q'].includes(key)) {
+              // Detach listener and resolve immediately
+              process.stdin.off('data', handler);
+              // Abort the active select so it stops listening
+              try { ac.abort(); } catch { }
+              resolve(key);
+            }
+          };
+          process.stdin.on('data', handler);
+          // Ensure cleanup if the select completes first
+          // Avoid keeping the listener around across iterations
+          selectPromise.finally(() => {
+            try { process.stdin.off('data', handler); } catch { }
+          });
+        });
+        // Whichever happens first wins
+        // Avoid unhandled rejection if aborted by keypress
+        selectPromise.catch(() => { });
+        const result = await Promise.race([selectPromise, keyPromise]);
+        return result as string | symbol;
+      }
+
       while (running) {
         const previewMessages = candidates.map((msg, i) => {
           const full = prefix + msg;
@@ -85,17 +123,14 @@ program
           return `${indicator} ${i + 1}. ${pc.bold(full)} ${pc.dim(`(${len} chars)`)}`;
         });
 
-        const action = await p.select({
-          message: 'Choose a commit message:',
-          options: [
-            { value: '1', label: previewMessages[0] },
-            { value: '2', label: previewMessages[1] },
-            { value: '3', label: previewMessages[2] },
-            { value: 'r', label: pc.cyan('↻ Regenerate new options') },
-            { value: 'p', label: pc.magenta('✎ Set/change prefix') },
-            { value: 'q', label: pc.red('✕ Quit without committing') },
-          ],
-        });
+        const action = await selectWithShortcuts([
+          { value: '1', label: previewMessages[0] },
+          { value: '2', label: previewMessages[1] },
+          { value: '3', label: previewMessages[2] },
+          { value: 'r', label: pc.cyan('↻ Regenerate new options') },
+          { value: 'p', label: pc.magenta('✎ Set/change prefix') },
+          { value: 'q', label: pc.red('✕ Quit without committing') },
+        ]);
 
         if (p.isCancel(action) || action === 'q') {
           p.outro(pc.yellow('Cancelled'));
