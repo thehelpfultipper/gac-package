@@ -1,5 +1,6 @@
 import type { StagedChanges } from '../git.js';
 import type { Config } from '../config.js';
+import { capitalizeFirst } from './heuristic.js';
 
 export async function generateWithOllama(
     changes: StagedChanges,
@@ -58,7 +59,8 @@ export async function generateWithOllama(
         const lines = text
             .split('\n')
             .map((l: string) => l.replace(/^\d+\.\s*/, '').trim())
-            .filter((l: string) => l.length > 0);
+            .filter((l: string) => l.length > 0)
+            .map((l: string) => capitalizeFirst(l));
 
         if (lines.length >= 3) {
             return lines.slice(0, 3);
@@ -78,6 +80,9 @@ export async function generateWithOllama(
 function buildContext(changes: StagedChanges): string {
     const parts: string[] = [];
 
+    // Limit to top 10 files to keep context compact
+    const filesToShow = changes.files.slice(0, 10);
+
     for (const file of changes.files.slice(0, 10)) {
         const status = {
             A: 'Added',
@@ -87,10 +92,14 @@ function buildContext(changes: StagedChanges): string {
             C: 'Copied',
         }[file.status] || 'Changed';
 
-        parts.push(`${status}: ${file.path} (+${file.additions}/-${file.deletions})`);
+        const changeSize = file.additions + file.deletions;
+        const sizeIndicator = changeSize > 100 ? ' (large)' : changeSize > 20 ? ' (medium)' : '';
 
-        if (file.summary) {
-            parts.push(`  → ${file.summary}`);
+        parts.push(`${status}: ${file.path} (+${file.additions}/-${file.deletions})${sizeIndicator}`);
+
+        // Only include summary for modified/added files with identifiable changes
+        if (file.summary && (file.status === 'M' || file.status === 'A')) {
+            parts.push(`  Key changes: ${file.summary}`);
         }
     }
 

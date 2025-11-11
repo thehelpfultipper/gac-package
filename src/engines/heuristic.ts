@@ -6,7 +6,7 @@ export async function generateHeuristic(
   config: Config
 ): Promise<string[]> {
   const { files } = changes;
-  
+
   // Analyze change patterns
   const stats = {
     added: files.filter(f => f.status === 'A').length,
@@ -16,16 +16,16 @@ export async function generateHeuristic(
   };
 
   const totalChanges = files.reduce((sum, f) => sum + f.additions + f.deletions, 0);
-  
+
   // Detect change type
   const type = detectChangeType(files, changes.diff);
-  
+
   // Extract scope from file paths
   const scope = detectScope(files);
-  
+
   // Build subject from files and summaries
   const subject = buildSubject(files, type, totalChanges);
-  
+
   // Generate three diverse candidates
   const candidates: string[] = [];
 
@@ -103,7 +103,7 @@ function detectChangeType(files: any[], diff: string): string {
       if (check instanceof RegExp) return check.test(diff);
       return false;
     });
-    
+
     if (matches.length >= 2 || (type === 'feat' && matches.length >= 1)) {
       return type;
     }
@@ -114,10 +114,10 @@ function detectChangeType(files: any[], diff: string): string {
 
 function detectScope(files: any[]): string {
   if (files.length === 0) return '';
-  
+
   // Find common parent directory
   const paths = files.map(f => f.path);
-  
+
   if (paths.length === 1) {
     const parts = paths[0].split('/');
     return parts.length > 1 ? parts[parts.length - 2] : '';
@@ -126,7 +126,7 @@ function detectScope(files: any[]): string {
   // Find longest common prefix
   const commonParts: string[] = [];
   const allParts = paths.map(p => p.split('/'));
-  
+
   for (let i = 0; i < Math.min(...allParts.map(p => p.length)); i++) {
     const part = allParts[0][i];
     if (allParts.every(parts => parts[i] === part)) {
@@ -146,19 +146,19 @@ function buildSubject(files: any[], type: string, totalChanges: number): string 
     const file = files[0];
     const fileName = file.path.split('/').pop()?.replace(/\\.[^.]+$/, '');
     const action = getAction(file.status, type);
-    
+
     if (file.summary) {
       const ids = file.summary.split(',')[0].trim();
       return `${action} ${ids} in ${fileName}`;
     }
-    
+
     return `${action} ${fileName}`;
   }
 
   // Multiple files
   const action = getAction(files[0].status, type);
   const categories = categorizeFiles(files);
-  
+
   if (categories.size === 1) {
     const [category] = categories.keys();
     return `${action} ${category} across ${files.length} files`;
@@ -180,7 +180,7 @@ function getAction(status: string, type: string): string {
   if (status === 'A') return type === 'feat' ? 'add' : 'create';
   if (status === 'D') return 'remove';
   if (status === 'R') return 'rename';
-  
+
   // Modified
   const actions: Record<string, string> = {
     feat: 'add',
@@ -191,16 +191,16 @@ function getAction(status: string, type: string): string {
     style: 'style',
     chore: 'update',
   };
-  
+
   return actions[type] || 'update';
 }
 
 function categorizeFiles(files: any[]): Map<string, number> {
   const categories = new Map<string, number>();
-  
+
   for (const file of files) {
     let category = 'files';
-    
+
     if (/\\.(tsx?|jsx?)$/.test(file.path)) category = 'components';
     else if (/\\.(css|scss|less)$/.test(file.path)) category = 'styles';
     else if (/\\.test\\.|\\.spec\\.|__tests__/.test(file.path)) category = 'tests';
@@ -208,10 +208,10 @@ function categorizeFiles(files: any[]): Map<string, number> {
     else if (/api|route|endpoint/.test(file.path)) category = 'API';
     else if (/config|settings/.test(file.path)) category = 'config';
     else if (/\\.py$/.test(file.path)) category = 'modules';
-    
+
     categories.set(category, (categories.get(category) || 0) + 1);
   }
-  
+
   return categories;
 }
 
@@ -226,11 +226,12 @@ function getEmoji(type: string): string {
     chore: '🔧',
     perf: '⚡',
   };
-  
+
   return emojis[type] || '🔨';
 }
 
-function capitalizeFirst(str: string): string {
+export function capitalizeFirst(str: string): string {
+  if (!str) return str;
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
@@ -240,6 +241,6 @@ function generateAlternative(files: any[], type: string, scope: string, index: n
     `improve ${scope || 'implementation'}`,
     `modify ${files.map(f => f.path.split('/').pop()).slice(0, 2).join(' and ')}`,
   ];
-  
+
   return alternatives[index % alternatives.length];
 }
