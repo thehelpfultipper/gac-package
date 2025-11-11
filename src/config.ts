@@ -10,6 +10,8 @@ export interface Config {
   model: string;
   maxLen: number;
   dryRun: boolean;
+  // Optional per-run variation seed for deterministic regeneration
+  regen?: number;
 }
 
 export async function loadConfig(cliOptions: any): Promise<Config> {

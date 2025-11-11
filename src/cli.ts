@@ -47,12 +47,15 @@ program
       // Generate candidates
       let candidates: string[] = [];
       let currentEngine = config.engine;
+      let regen = 0;
 
       const generateNew = async () => {
         const gen = p.spinner();
         gen.start(`Generating with ${currentEngine}`);
 
         try {
+          // Pass deterministic regen counter for variation
+          config.regen = regen;
           candidates = await generateCandidates(changes, config);
           gen.stop('Generated 3 options');
         } catch (err) {
@@ -60,6 +63,7 @@ program
             gen.stop('Ollama unavailable, using heuristic fallback');
             currentEngine = 'none';
             config.engine = 'none';
+            config.regen = regen;
             candidates = await generateCandidates(changes, config);
           } else {
             throw err;
@@ -99,6 +103,7 @@ program
         }
 
         if (action === 'r') {
+          regen += 1;
           await generateNew();
           continue;
         }
