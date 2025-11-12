@@ -16,6 +16,9 @@ export interface Config {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   geminiApiKey?: string;
+  // Changelog options (configurable via CLI, .gacrc, or package.json#gac)
+  changelogPath?: string;
+  changelogSince?: string;
 }
 
 export async function loadConfig(cliOptions: any): Promise<Config> {
@@ -85,5 +88,7 @@ export async function loadConfig(cliOptions: any): Promise<Config> {
     openaiApiKey: cliOptions.openaiApiKey || envOpenAI || (fileConfig as any).openaiApiKey,
     anthropicApiKey: cliOptions.anthropicApiKey || envAnthropic || (fileConfig as any).anthropicApiKey,
     geminiApiKey: cliOptions.geminiApiKey || envGemini || (fileConfig as any).geminiApiKey,
+    changelogPath: cliOptions.changelogPath || (fileConfig as any).changelogPath,
+    changelogSince: cliOptions.since || (fileConfig as any).changelogSince,
   };
 }

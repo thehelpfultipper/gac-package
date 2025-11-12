@@ -17,6 +17,9 @@ program
   .option('--engine <name>', 'Engine: ollama|openai|anthropic|gemini|none', 'ollama')
   .option('--model <name>', 'Model name for Ollama', 'mistral:7b')
   .option('--max-len <number>', 'Max subject length', '72')
+  .option('--changelog [version]', 'Generate/update CHANGELOG.md (optional version label)')
+  .option('--changelog-path <path>', 'Override changelog file path')
+  .option('--since <ref>', 'Generate changelog entries since Git ref (tag/commit)')
   .option('--dry-run', 'Show message without committing')
   .action(async (options) => {
     console.clear();
@@ -25,6 +28,34 @@ program
     try {
       // Load config (merges with CLI options)
       const config = await loadConfig(options);
+
+      // Changelog mode: generate or update CHANGELOG and exit
+      if (options.changelog !== undefined) {
+        const { upsertChangelog } = await import('./changelog.js');
+        const s = p.spinner();
+        s.start('Generating changelog');
+        try {
+          const result = await upsertChangelog({
+            config,
+            versionLabel: typeof options.changelog === 'string' ? options.changelog : undefined,
+            dryRun: !!config.dryRun,
+            path: options.changelogPath || config.changelogPath,
+            sinceRef: options.since || config.changelogSince,
+          });
+          s.stop(result.written ? `Updated ${result.path}` : 'Changelog preview');
+          if (result.preview) {
+            p.note(result.preview, 'Preview');
+          } else {
+            p.note(`Path: ${result.path}`, 'Changelog');
+          }
+          p.outro(pc.green('Done'));
+          process.exit(0);
+        } catch (err: any) {
+          s.stop('Failed to generate changelog');
+          p.outro(pc.red(err?.message || String(err)));
+          process.exit(1);
+        }
+      }
 
       // Get staged changes
       const s = p.spinner();
