@@ -94,15 +94,24 @@ function buildNewFile(section: string): string {
 }
 
 function mergeIntoExisting(existing: string, newSection: string, version: string): string {
-  // If version heading already exists, replace that section; else insert after top H1
+  // Replace the section matching the version heading (with optional date), else insert after top H1
   const lines = existing.split('\n');
-  const heading = toVersionHeading(version);
-  const startIdx = lines.findIndex(l => l.trim().toLowerCase() === heading.trim().toLowerCase());
+
+  const escapeRegExp = (s: string) => s.replace(/[\-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const label = (version || '').replace(/^v?/, 'v');
+  const headingRe = new RegExp(
+    `^##\\s+\\[?${escapeRegExp(label)}\\]?\\b(?:\\s*-\\s*\\d{4}-\\d{2}-\\d{2})?\\s*$`,
+    'i'
+  );
+  const isVersionHeading = (l: string) =>
+    /^##\s+(?:\[?v?\d+\.\d+\.\d+\]?\b(?:\s*-\s*\d{4}-\d{2}-\d{2})?|Unreleased\b.*)$/i.test(l.trim());
+
+  const startIdx = lines.findIndex(l => headingRe.test(l));
   if (startIdx !== -1) {
     // Find next version heading or EOF
     let endIdx = lines.length;
     for (let i = startIdx + 1; i < lines.length; i++) {
-      if (/^##\s+/.test(lines[i])) { endIdx = i; break; }
+      if (isVersionHeading(lines[i])) { endIdx = i; break; }
     }
     const before = lines.slice(0, startIdx).join('\n');
     const after = lines.slice(endIdx).join('\n');
@@ -163,9 +172,10 @@ async function generateSectionMarkdown(commits: CommitEntry[], config: Config, v
     const prompt = buildChangelogPrompt(commits, versionLabel);
     const llm = await completeWithEngine(config, prompt);
     const cleaned = llm.trim();
-    // If model omitted heading, add it
-    const hasHeading = /^##\s+/.test(cleaned.split('\n')[0]);
-    const body = hasHeading ? cleaned : `${heading}\n\n${cleaned}`;
+    // If model omitted a proper version heading, add it
+    const firstLine = (cleaned.split('\n').find(l => l.trim() !== '') || '').trim();
+    const hasVersionHeading = /^##\s+(?:\[?v?\d+\.\d+\.\d+\]?\b|Unreleased\b)/i.test(firstLine);
+    const body = hasVersionHeading ? cleaned : `${heading}\n\n${cleaned}`;
     return body + '\n';
   } catch {
     return `${heading}\n\n${heuristic.trim()}\n`;

@@ -2,15 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## v1.0.0 - 2025-11-12
+
 ## Added
-- Changelog generation logic
+- release script and changelog generation logic
 
 ## Changed
-- Streamlined command parsing and removed legacy options
-- Refactored engine architecture to integrate Gemini and shared utilities
-- Improved config scope detection and categorization; updated README
-- Updated Ollama logic, including capitalizeFirst heuristic, file size handling, response handling, and error text
-- Updated .gitignore
+- streamline command parsing and remove legacy options
+- refactor engine architecture with Gemini, Shared integration, and shared utilities
+- address config scope detection and categorization; improve README
+- update heuristic capitalizeFirst and Ollama file size logic
+- update ollama response handling and error text
+- update .gitignore
 
 ## Fixed
 - selectWithShortcuts in CLI
