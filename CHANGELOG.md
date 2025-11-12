@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.0.1 - 2025-11-12
+
+## Added
+- .npmignore, banner, and package.json updates
+- LLM client
+
+## Changed
+- Gemini, OpenAI, and Ollama engines updated
+- Changelog regex handling and label extraction updated
+
+## Fixed
+- CLI code addressed
+
 ## v1.0.0 - 2025-11-12
 
 ## Added

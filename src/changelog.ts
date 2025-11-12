@@ -1,5 +1,4 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { readFile } from 'fs/promises';
 import { join } from 'path';
 import type { Config } from './config.js';
 import { execa } from 'execa';
@@ -76,7 +75,7 @@ async function getSinceRef(changelogPath: string, existed: boolean): Promise<str
       const txt = readFileSync(changelogPath, 'utf-8');
       const m = txt.match(/^##\s+\[?v?([0-9]+\.[0-9]+\.[0-9]+)[^\n]*$/m);
       if (m) return `v${m[1]}`;
-    } catch { }
+    } catch {}
   }
   return null;
 }
@@ -86,7 +85,7 @@ async function inferVersionLabel(): Promise<string> {
   try {
     const { stdout } = await execa('git', ['describe', '--tags', '--exact-match']);
     if (stdout.trim()) return stdout.trim();
-  } catch { }
+  } catch {}
   const today = new Date().toISOString().slice(0, 10);
   return `Unreleased - ${today}`;
 }
@@ -97,15 +96,17 @@ function buildNewFile(section: string): string {
 }
 
 function mergeIntoExisting(existing: string, newSection: string, version: string): string {
-  // Replace the section matching the version heading (with optional date), else insert after top H1
   const lines = existing.split('\n');
 
   const escapeRegExp = (s: string) => s.replace(/[\-\/\\^$*+?.()|[\]{}]/g, '\\$&');
   const raw = (version || '').trim();
   const semverMatch = raw.match(/^\[?v?(\d+\.\d+\.\d+)\]?/i);
+
+  const unreleasedRe = new RegExp(`^##\\s+Unreleased\\b(?:\\s*-\\s*\\d{4}-\\d{2}-\\d{2})?\\s*$`, 'i');
   let headingRe: RegExp;
+  
   if (/^unreleased\b/i.test(raw)) {
-    headingRe = new RegExp(`^##\\s+Unreleased\\b(?:\\s*-\\s*\\d{4}-\\d{2}-\\d{2})?\\s*$`, 'i');
+    headingRe = unreleasedRe;
   } else if (semverMatch) {
     const versionDigits = semverMatch[1];
     headingRe = new RegExp(
@@ -113,35 +114,78 @@ function mergeIntoExisting(existing: string, newSection: string, version: string
       'i'
     );
   } else {
-    // Fallback: match the raw string exactly
     headingRe = new RegExp(`^##\\s+${escapeRegExp(raw)}\\s*$`, 'i');
   }
+  
   const isVersionHeading = (l: string) =>
     /^##\s+(?:\[?v?\d+\.\d+\.\d+\]?\b(?:\s*-\s*\d{4}-\d{2}-\d{2})?|Unreleased\b.*)$/i.test(l.trim());
 
-  const startIdx = lines.findIndex(l => headingRe.test(l));
+  // For a versioned release, first try to replace an "Unreleased" section.
+  let startIdx = -1;
+  if (semverMatch) {
+    startIdx = lines.findIndex(l => unreleasedRe.test(l));
+  }
+
+  // If not a release or no "Unreleased" section found, find a section with the same version name.
+  if (startIdx === -1) {
+    startIdx = lines.findIndex(l => headingRe.test(l));
+  }
+
   if (startIdx !== -1) {
-    // Find next version heading or EOF
+    // Found a section to replace. Find where it ends.
     let endIdx = lines.length;
     for (let i = startIdx + 1; i < lines.length; i++) {
-      if (isVersionHeading(lines[i])) { endIdx = i; break; }
+      if (isVersionHeading(lines[i])) {
+        endIdx = i;
+        break;
+      }
     }
-    const before = lines.slice(0, startIdx).join('\n');
-    const after = lines.slice(endIdx).join('\n');
-    return [before, newSection.trim(), after].filter(Boolean).join('\n');
+
+    const before = lines.slice(0, startIdx);
+    const after = lines.slice(endIdx);
+    
+    // Trim trailing whitespace from `before` to ensure clean join
+    while (before.length > 0 && before[before.length - 1].trim() === '') {
+      before.pop();
+    }
+    // Trim leading whitespace from `after`
+    while (after.length > 0 && after[0].trim() === '') {
+      after.shift();
+    }
+
+    const contentBefore = before.join('\n');
+    const contentAfter = after.join('\n');
+    
+    const parts = [];
+    if (contentBefore) parts.push(contentBefore);
+    parts.push(newSection.trim());
+    if (contentAfter) parts.push(contentAfter);
+    
+    return parts.join('\n\n') + '\n';
   }
 
-  // Insert after first H1 if present
+  // No section to replace, insert at the top.
   const firstH1 = lines.findIndex(l => /^#\s+/.test(l));
   if (firstH1 !== -1) {
-    const before = lines.slice(0, firstH1 + 1).join('\n');
-    const after = lines.slice(firstH1 + 1).join('\n');
-    return [before, '', newSection.trim(), after].join('\n');
+    const before = lines.slice(0, firstH1 + 1);
+    const after = lines.slice(firstH1 + 1);
+    
+     // Trim leading whitespace from `after`
+    while (after.length > 0 && after[0].trim() === '') {
+      after.shift();
+    }
+
+    const parts = [...before, '', newSection.trim()];
+    if (after.length > 0) {
+        parts.push('', ...after);
+    }
+    return parts.join('\n');
   }
 
-  // Default: prepend
-  return newSection.trim() + '\n\n' + existing;
+  // Fallback: prepend to the whole file
+  return [newSection.trim(), existing].join('\n\n');
 }
+
 
 async function getLastTag(): Promise<string | null> {
   try {

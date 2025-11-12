@@ -352,7 +352,7 @@ When to use which flag:
   - Optional: `--since <ref>` to choose a custom starting point, and `--changelog-path` to write somewhere else (e.g., `docs/CHANGELOG.md`).
 
 - `gac --release`
-  - One step release: determines the next semver version from commits since the last tag, updates `CHANGELOG.md` for that version, and creates an annotated Git tag (`vX.Y.Z`).
+  - One step release: determines the next semver version from commits since the last tag, updates `CHANGELOG.md`, and creates an annotated Git tag (`vX.Y.Z`). If an `## Unreleased` section exists, it's automatically replaced by the new versioned section.
   - Prefer explicit control:
     - `--bump patch|minor|major` to increment from the last version
     - `--release-as vX.Y.Z` to set the exact target version
