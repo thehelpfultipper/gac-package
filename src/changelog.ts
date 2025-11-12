@@ -38,7 +38,7 @@ export async function upsertChangelog(opts: Options): Promise<ChangelogResult> {
   }
 
   const version = opts.versionLabel || (await inferVersionLabel());
-  const newSection = await generateSectionMarkdown(commits, opts.config, version);
+  const newSection = await generateSectionMarkdown(commits, opts.config, version, sinceRef);
 
   if (opts.dryRun) {
     return { path, written: false, preview: newSection };
@@ -148,8 +148,8 @@ async function getCommitsSince(ref: string | null): Promise<CommitEntry[]> {
     });
 }
 
-async function generateSectionMarkdown(commits: CommitEntry[], config: Config, versionLabel: string): Promise<string> {
-  const heading = toVersionHeading(versionLabel);
+async function generateSectionMarkdown(commits: CommitEntry[], config: Config, versionLabel: string, sinceRef: string | null): Promise<string> {
+  const heading = await buildVersionHeading(versionLabel, sinceRef);
   const categorized = categorizeCommits(commits);
   const heuristic = renderMarkdownFromCategories(categorized);
 
@@ -172,10 +172,14 @@ async function generateSectionMarkdown(commits: CommitEntry[], config: Config, v
   }
 }
 
-function parseConventional(commit: CommitEntry): { type: string; scope?: string; subject: string } {
-  const m = commit.subject.match(/^(\w+)(?:\(([^)]+)\))?!?:\s*(.+)$/);
-  if (m) return { type: m[1].toLowerCase(), scope: m[2], subject: m[3] };
-  return { type: 'other', subject: commit.subject };
+function parseConventional(commit: CommitEntry): { type: string; scope?: string; subject: string; breaking: boolean } {
+  const m = commit.subject.match(/^(\w+)(?:\(([^)]+)\))?(!)?:\s*(.+)$/);
+  if (m) {
+    const breaking = Boolean(m[3]) || /(^|\n)BREAKING CHANGES?:/i.test(commit.body);
+    return { type: m[1].toLowerCase(), scope: m[2], subject: m[4], breaking };
+  }
+  const breaking = /(^|\n)BREAKING CHANGES?:/i.test(commit.body);
+  return { type: 'other', subject: commit.subject, breaking };
 }
 
 function categorizeCommits(commits: CommitEntry[]): Map<string, Array<{ scope?: string; subject: string }>> {
@@ -187,24 +191,47 @@ function categorizeCommits(commits: CommitEntry[]): Map<string, Array<{ scope?: 
 
   for (const c of commits) {
     const p = parseConventional(c);
+    const item = { scope: p.scope, subject: sanitizeSubject(p.subject) };
+    if (p.breaking) {
+      push('Breaking Changes', item);
+      continue;
+    }
     switch (p.type) {
-      case 'feat': push('Added', p); break;
-      case 'fix': push('Fixed', p); break;
-      case 'perf': push('Performance', p); break;
-      case 'refactor': push('Changed', p); break;
-      case 'docs': push('Docs', p); break;
-      case 'test': push('Tests', p); break;
-      case 'build':
-      case 'ci': push('CI', p); break;
-      case 'chore': push('Chore', p); break;
-      default: push('Other', p); break;
+      case 'feat': push('Added', item); break;
+      case 'fix': push('Fixed', item); break;
+      case 'perf': push('Performance', item); break;
+      case 'refactor': push('Changed', item); break;
+      case 'docs': push('Documentation', item); break;
+      case 'test': push('Tests', item); break;
+      case 'build': push('Build', item); break;
+      case 'ci': push('CI', item); break;
+      case 'revert': push('Reverts', item); break;
+      case 'chore': push('Chore', item); break;
+      default: push('Other', item); break;
     }
   }
   return map;
 }
 
 function renderMarkdownFromCategories(map: Map<string, Array<{ scope?: string; subject: string }>>): string {
-  const sectionsOrder = ['Added', 'Fixed', 'Changed', 'Performance', 'Docs', 'Tests', 'CI', 'Chore', 'Other'];
+  // Order aligned with Keep a Changelog where possible
+  const sectionsOrder = [
+    'Breaking Changes',
+    'Added',
+    'Changed',
+    'Deprecated',
+    'Removed',
+    'Fixed',
+    'Security',
+    'Performance',
+    'Documentation',
+    'Tests',
+    'Build',
+    'CI',
+    'Reverts',
+    'Chore',
+    'Other',
+  ];
   const parts: string[] = [];
   for (const key of sectionsOrder) {
     const items = map.get(key);
@@ -276,6 +303,65 @@ async function completeWithOpenAI(config: Config, prompt: string): Promise<strin
   const text: string = data?.choices?.[0]?.message?.content ?? '';
   if (!text) throw new Error('Empty response from OpenAI');
   return text;
+}
+
+// Helpers for heading/date/compare links
+async function buildVersionHeading(versionLabel: string, sinceRef: string | null): Promise<string> {
+  // Normalize heading text and append ISO date for non-Unreleased
+  const isUnreleased = /^unreleased/i.test(versionLabel);
+  const today = new Date().toISOString().slice(0, 10);
+
+  let label = versionLabel;
+  // If label looks like a bare semver (1.2.3), prefix with v for consistency
+  if (/^\d+\.\d+\.\d+$/.test(label)) label = `v${label}`;
+
+  const baseHeading = isUnreleased ? `## Unreleased - ${today}` : `## ${label} - ${today}`;
+
+  const compare = await getCompareLink(sinceRef, isUnreleased ? 'HEAD' : label);
+  if (compare) {
+    return `${baseHeading}\n\n[Compare changes](${compare})`;
+  }
+  return baseHeading;
+}
+
+async function getCompareLink(fromRef: string | null, toRef: string | null): Promise<string | null> {
+  if (!fromRef || !toRef) return null;
+  const remoteUrl = await getOriginHttpsUrl();
+  if (!remoteUrl) return null;
+  // GitHub/GitLab style compare URLs are similar
+  if (/github\.com|gitlab\.com|bitbucket\.org/.test(remoteUrl)) {
+    return `${remoteUrl}/compare/${encodeURIComponent(fromRef)}...${encodeURIComponent(toRef)}`;
+  }
+  return null;
+}
+
+async function getOriginHttpsUrl(): Promise<string | null> {
+  try {
+    const { stdout } = await execa('git', ['remote', 'get-url', 'origin']);
+    const raw = stdout.trim();
+    if (!raw) return null;
+    // git@github.com:owner/repo.git -> https://github.com/owner/repo
+    const sshMatch = raw.match(/^git@([^:]+):(.+)\.git$/);
+    if (sshMatch) {
+      return `https://${sshMatch[1]}/${sshMatch[2]}`;
+    }
+    // https URL; strip .git suffix
+    const httpsMatch = raw.match(/^https?:\/\/(.+)$/);
+    if (httpsMatch) {
+      const url = `https://${httpsMatch[1]}`.replace(/\.git$/, '');
+      return url;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeSubject(subject: string): string {
+  // Remove trailing punctuation and leading verbs like "update" noise minimalism
+  let s = subject.trim();
+  s = s.replace(/[.;:!\s]+$/g, '');
+  return s;
 }
 
 async function completeWithGemini(config: Config, prompt: string): Promise<string> {

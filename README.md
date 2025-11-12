@@ -127,6 +127,19 @@ gac --max-len 100    # Longer messages (not recommended)
 ### Complete Flag Reference
 
 | Flag | Description | Default |
+|---|---|---|
+| `--style <type>` | Message style: `plain` | `conv` | `gitmoji` | `mix` | `mix` |
+| `--engine <name>` | Engine: ollama | openai | anthropic | gemini | none | `ollama` |
+| `--model <name>` | Model name (Ollama/OpenAI/Gemini) | `mistral:7b` |
+| `--max-len <num>` | Max subject line length | `72` |
+| `--dry-run` | Preview without committing or releasing | `false` |
+| `--prefix <text>` | Prefix for commit message | `""` |
+| `--changelog [version]` | Generate/update `CHANGELOG.md` (optional version label) | — |
+| `--changelog-path <path>` | Override changelog file path | auto-detect |
+| `--since <ref>` | Generate changelog since Git ref (tag/commit) | latest tag/heading |
+| `--release` | Auto-bump version, update changelog, and create Git tag | — |
+| `--update-pkg` | With `--release`, also update `package.json` version | — |
+| Flag | Description | Default |
 |------|-------------|---------|
 | `--prefix <text>` | Prefix for all messages | `""` (auto-detect from branch) |
 | `--style <type>` | Message style: plain \| conv \| gitmoji \| mix | `mix` |
@@ -328,6 +341,68 @@ When you run `gac`, you'll see an interactive menu:
 - ⚠ Yellow warning - Over 72 characters (consider regenerating)
 
 ## Examples
+
+## Changelog & Releases
+
+When to use which flag:
+
+- `gac --changelog [version]`
+  - Use to generate or update `CHANGELOG.md` without tagging.
+  - Great for previewing (`--dry-run`) or preparing notes before a release.
+  - If `version` is provided (e.g., `v1.2.3`), inserts/replaces that section.
+  - If omitted, uses an “Unreleased - YYYY-MM-DD” heading and the latest tag as the “since” point.
+  - Optional: `--since <ref>` to choose a custom starting point, and `--changelog-path` to write somewhere else (e.g., `docs/CHANGELOG.md`).
+
+- `gac --release`
+  - One step release: determines the next semver version from commits since the last tag, updates `CHANGELOG.md` for that version, and creates an annotated Git tag (`vX.Y.Z`).
+  - Prefer explicit control:
+    - `--bump patch|minor|major` to increment from the last version
+    - `--release-as vX.Y.Z` to set the exact target version
+  - Use `--dry-run` to preview without writing anything.
+  - Add `--update-pkg` to also bump `package.json`’s `version` to `X.Y.Z`.
+
+Are these redundant?
+- No. `--release` includes changelog generation but also handles bumping and tagging. `--changelog` is for manual or ad‑hoc changelog updates (preview, custom label/path/range) without touching tags or versions.
+
+How versioning is determined (`--release`)
+- Base version source: the most recent semver Git tag matching `vX.Y.Z`. If none, falls back to `package.json`’s `version` or `0.0.0`.
+- You can control the target in three ways:
+  - Explicit target: `--release-as vX.Y.Z`
+  - Guided increment: `--bump patch|minor|major`
+  - Auto (optional): If neither is provided, a simple Conventional-Commits-aware detection runs; if your commits aren’t conventional, it defaults to `patch`.
+- Next version: tags as `vX.Y.Z` and optionally updates `package.json` with `--update-pkg`.
+
+Changelog formatting basics
+- Groups entries into sections (Breaking Changes, Added, Changed, Fixed, etc.).
+- Adds date to headings; includes a repository compare link when possible.
+- Detects breaking changes via `!` after type or `BREAKING CHANGE(S):` in body.
+
+Examples
+```bash
+# Preview changelog entries since last tag without writing
+gac --changelog --dry-run
+
+# Generate/replace a specific section label (no tag)
+gac --changelog v1.2.3
+
+# Create a release: compute next version, update changelog, create tag (auto bump)
+gac --release
+
+# Also update package.json version
+gac --release --update-pkg
+
+# Explicit minor bump from last version
+gac --release --bump minor
+
+# Set exact version
+gac --release --release-as v2.0.0
+
+# Use a custom changelog path
+gac --changelog --changelog-path docs/CHANGELOG.md
+
+# Generate changes since a specific tag/commit
+gac --changelog --since v1.0.0
+```
 
 ### Example 1: Quick commit with auto-prefix
 

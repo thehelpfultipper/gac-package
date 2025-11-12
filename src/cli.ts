@@ -21,6 +21,10 @@ program
   .option('--changelog [version]', 'Generate/update CHANGELOG.md (optional version label)')
   .option('--changelog-path <path>', 'Override changelog file path')
   .option('--since <ref>', 'Generate changelog entries since Git ref (tag/commit)')
+  .option('--release', 'Auto-bump version, update CHANGELOG, and create Git tag')
+  .option('--bump <level>', 'Release bump: patch|minor|major (overrides auto-detect)')
+  .option('--release-as <version>', 'Release as exact version (e.g., 1.2.3 or v1.2.3)')
+  .option('--update-pkg', 'Also update package.json version when releasing')
   .option('--dry-run', 'Show message without committing')
   .action(async (options) => {
     console.clear();
@@ -29,6 +33,46 @@ program
     try {
       // Load config (merges with CLI options)
       const config = await loadConfig(options);
+
+      // Release mode: bump version, update changelog, create tag, then exit
+      if (options.release) {
+        const { runRelease } = await import('./release.js');
+        const s = p.spinner();
+        s.start('Analyzing commits for release');
+        try {
+          const bumpLevel = typeof options.bump === 'string' ? String(options.bump).toLowerCase() : undefined;
+          const bumpOverride = (bumpLevel === 'major' || bumpLevel === 'minor' || bumpLevel === 'patch') ? bumpLevel : undefined;
+          const result = await runRelease({
+            config,
+            updatePkg: !!options.updatePkg,
+            dryRun: !!config.dryRun,
+            bumpOverride,
+            releaseAs: options['releaseAs'],
+            sinceRef: options.since || null,
+          });
+          s.stop('Release plan ready');
+
+          const summary: string[] = [];
+          summary.push(`Base: ${result.baseRef ?? 'none'}`);
+          summary.push(`Bump: ${result.bump}`);
+          summary.push(`Next: ${pc.bold(result.nextVersion)}`);
+          p.note(summary.join('\n'), 'Release');
+
+          if (result.preview) p.note(result.preview, 'Changelog preview');
+
+          if (!config.dryRun) {
+            p.note(`Tag created: ${result.tagCreated ? 'yes' : 'no'}`, 'Tag');
+            if (options.updatePkg) p.note('package.json version updated', 'Package');
+          }
+
+          p.outro(pc.green(config.dryRun ? 'Dry run complete' : 'Release complete'));
+          process.exit(0);
+        } catch (err: any) {
+          s.stop('Failed to create release');
+          p.outro(pc.red(err?.message || String(err)));
+          process.exit(1);
+        }
+      }
 
       // Changelog mode: generate or update CHANGELOG and exit
       if (options.changelog !== undefined) {
