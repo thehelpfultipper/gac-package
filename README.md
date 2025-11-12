@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="./assets/banner.svg" alt="gac - Git Auto Commit banner" />
+</div>
+
 # gac - Git Auto Commit
 
 Smart, succinct Git commit messages - **free & local-first**

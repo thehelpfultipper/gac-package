@@ -1,5 +1,5 @@
 {
-  "name": "gac",
+  "name": "@thehelpfultipper/gac",
   "version": "1.0.0",
   "description": "Smart, succinct Git commit messages - free & local-first",
   "main": "dist/index.js",
@@ -7,6 +7,12 @@
     "gac": "./dist/cli.js"
   },
   "type": "module",
+  "files": [
+    "dist/",
+    "assets/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -17,12 +23,25 @@
     "git",
     "commit",
     "ai",
+    "llm",
     "ollama",
+    "openai",
+    "gemini",
     "conventional-commits",
-    "cli"
+    "cli",
+    "automation",
+    "developer-tools"
   ],
   "author": "Klea Merkuri",
   "license": "MIT",
+  "homepage": "https://thehelpfultipper.com/gac/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thehelpfultipper/gac-package.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thehelpfultipper/gac-package/issues"
+  },
   "engines": {
     "node": ">=18.0.0"
   },

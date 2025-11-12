@@ -1,0 +1,16 @@
+# Source files
+src/
+
+# Development config
+tsconfig.json
+.vscode/
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS-specific
+.DS_Store
