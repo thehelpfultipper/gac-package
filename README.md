@@ -95,11 +95,11 @@ export GAC_PREFIX="JIRA-123: " && gac  # Via environment variable
 ```
 
 **Auto-detection from branch names:**
-If your branch is named like \`feature/ABC-123-add-auth\`, gac automatically detects and suggests \`ABC-123: \` as the prefix.
+If your branch is named like `feature/ABC-123-add-auth`, gac automatically detects and suggests `ABC-123: ` as the prefix.
 
 ### Model Selection (Ollama)
 
-**Important:** If using a model other than the default (\`mistral:7b\`), you **must** specify it:
+**Important:** If using a model other than the default (`mistral:7b`), you **must** specify it:
 
 ```bash
 # Via command flag
@@ -112,10 +112,10 @@ export GAC_MODEL="llama3.2:3b" && gac
 ```
 
 **Recommended models** (fastest to slowest):
-- \`llama3.2:3b\` - Fastest, great for quick commits
-- \`phi3:3.8b\` - Fast, good quality
-- \`mistral:7b\` - Default, balanced speed/quality
-- \`llama3.1:8b\` - Slower but high quality
+- `llama3.2:3b` - Fastest, great for quick commits
+- `phi3:3.8b` - Fast, good quality
+- `mistral:7b` - Default, balanced speed/quality
+- `llama3.1:8b` - Slower but high quality
 
 ### Length Control
 
@@ -126,27 +126,21 @@ gac --max-len 100    # Longer messages (not recommended)
 
 ### Complete Flag Reference
 
-| Flag | Description | Default |
-|---|---|---|
-| `--style <type>` | Message style: `plain` | `conv` | `gitmoji` | `mix` | `mix` |
-| `--engine <name>` | Engine: ollama | openai | anthropic | gemini | none | `ollama` |
-| `--model <name>` | Model name (Ollama/OpenAI/Gemini) | `mistral:7b` |
-| `--max-len <num>` | Max subject line length | `72` |
-| `--dry-run` | Preview without committing or releasing | `false` |
-| `--prefix <text>` | Prefix for commit message | `""` |
-| `--changelog [version]` | Generate/update `CHANGELOG.md` (optional version label) | — |
-| `--changelog-path <path>` | Override changelog file path | auto-detect |
-| `--since <ref>` | Generate changelog since Git ref (tag/commit) | latest tag/heading |
-| `--release` | Auto-bump version, update changelog, and create Git tag | — |
-| `--update-pkg` | With `--release`, also update `package.json` version | — |
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--prefix <text>` | Prefix for all messages | `""` (auto-detect from branch) |
-| `--style <type>` | Message style: plain \| conv \| gitmoji \| mix | `mix` |
-| `--engine <name>` | Engine: ollama \| openai \| anthropic \| gemini \| none | `ollama` |
-| `--model <name>` | Model name (Ollama/OpenAI/Gemini) | `mistral:7b` |
-| `--max-len <num>` | Max subject line length | `72` |
-| `--dry-run` | Preview without committing | `false` |
+| Flag                    | Description                                                      | Default                        |
+| ----------------------- | ---------------------------------------------------------------- | ------------------------------ |
+| `--style <type>`        | Message style: `plain`, `conv`, `gitmoji`, or `mix`              | `mix`                          |
+| `--engine <name>`       | Engine: `ollama`, `openai`, `gemini`, or `none`                   | `ollama`                       |
+| `--model <name>`        | Model name (for Ollama, OpenAI, or Gemini)                       | `mistral:7b`                   |
+| `--max-len <num>`       | Max subject line length                                          | `72`                           |
+| `--dry-run`             | Preview without committing or releasing                          | `false`                        |
+| `--prefix <text>`       | Prefix for commit message                                        | `""` (auto-detects from branch) |
+| `--changelog [version]` | Generate/update `CHANGELOG.md` (optional version label)          | —                              |
+| `--changelog-path <path>` | Override changelog file path                                     | auto-detect                    |
+| `--since <ref>`         | Generate changelog since a specific Git ref (tag/commit)         | latest tag/heading             |
+| `--release`             | Auto-bump version, update changelog, and create Git tag          | —                              |
+| `--bump <level>`        | With `--release`, force bump: `patch`, `minor`, or `major`       | auto-detect                    |
+| `--release-as <version>` | With `--release`, set exact version (e.g., `v1.2.3`)             | auto-detect                    |
+| `--update-pkg`          | With `--release`, also update `package.json` version             | `false`                        |
 
 ## Engine Behavior
 
@@ -154,9 +148,9 @@ gac --max-len 100    # Longer messages (not recommended)
 
 When you run `gac` without specifying an engine:
 
-1. **Tries Ollama first** - Attempts to connect to `http://127.0.0.1:11434`
-2. **Auto-falls back to heuristic** - If Ollama is unavailable/not running
-3. **No error shown** - Seamless fallback with a notice: "Ollama unavailable, using heuristic fallback"
+1.  **Tries Ollama first** - Attempts to connect to `http://127.0.0.1:11434`
+2.  **Auto-falls back to heuristic** - If Ollama is unavailable/not running
+3.  **No error shown** - Seamless fallback with a notice: "Ollama unavailable, using heuristic fallback"
 
 ```bash
 # These all behave the same way:
@@ -274,11 +268,11 @@ Add a `"gac"` field to your `package.json`:
 
 Settings are merged in this order (highest priority last):
 
-1. Default values
-2. `.gacrc` file
-3. `package.json` `"gac"` field
-4. Environment variables (`GAC_PREFIX`, `GAC_MODEL`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`/`GOOGLE_API_KEY`)
-5. Command-line flags (highest priority)
+1.  Default values
+2.  `.gacrc` file
+3.  `package.json` `"gac"` field
+4.  Environment variables (`GAC_PREFIX`, `GAC_MODEL`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`/`GOOGLE_API_KEY`)
+5.  Command-line flags (highest priority)
 
 **Example:**
 ```bash

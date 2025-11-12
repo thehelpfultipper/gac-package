@@ -3,6 +3,7 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import type { Config } from './config.js';
 import { execa } from 'execa';
+import { callLlmApi } from './engines/llm-client.js';
 
 export interface ChangelogResult {
   path: string;
@@ -16,7 +17,6 @@ interface Options {
   path?: string; // override path
   dryRun?: boolean;
   sinceRef?: string; // override since ref
-  merge?: 'replace' | 'append';
 }
 
 interface CommitEntry {
@@ -46,7 +46,7 @@ export async function upsertChangelog(opts: Options): Promise<ChangelogResult> {
   }
 
   const content = existed
-    ? mergeIntoExisting(readFileSync(path, 'utf-8'), newSection, version, opts.merge || 'replace')
+    ? mergeIntoExisting(readFileSync(path, 'utf-8'), newSection, version)
     : buildNewFile(newSection);
   writeFileSync(path, content, 'utf-8');
   return { path, written: true };
@@ -76,7 +76,7 @@ async function getSinceRef(changelogPath: string, existed: boolean): Promise<str
       const txt = readFileSync(changelogPath, 'utf-8');
       const m = txt.match(/^##\s+\[?v?([0-9]+\.[0-9]+\.[0-9]+)[^\n]*$/m);
       if (m) return `v${m[1]}`;
-    } catch {}
+    } catch { }
   }
   return null;
 }
@@ -86,7 +86,7 @@ async function inferVersionLabel(): Promise<string> {
   try {
     const { stdout } = await execa('git', ['describe', '--tags', '--exact-match']);
     if (stdout.trim()) return stdout.trim();
-  } catch {}
+  } catch { }
   const today = new Date().toISOString().slice(0, 10);
   return `Unreleased - ${today}`;
 }
@@ -96,7 +96,7 @@ function buildNewFile(section: string): string {
   return header + section.trim() + '\n';
 }
 
-function mergeIntoExisting(existing: string, newSection: string, version: string, mode: 'replace' | 'append' = 'replace'): string {
+function mergeIntoExisting(existing: string, newSection: string, version: string): string {
   // Replace the section matching the version heading (with optional date), else insert after top H1
   const lines = existing.split('\n');
 
@@ -107,9 +107,9 @@ function mergeIntoExisting(existing: string, newSection: string, version: string
   if (/^unreleased\b/i.test(raw)) {
     headingRe = new RegExp(`^##\\s+Unreleased\\b(?:\\s*-\\s*\\d{4}-\\d{2}-\\d{2})?\\s*$`, 'i');
   } else if (semverMatch) {
-    const label = 'v' + semverMatch[1];
+    const versionDigits = semverMatch[1];
     headingRe = new RegExp(
-      `^##\\s+\\[?${escapeRegExp(label)}\\]?\\b(?:\\s*-\\s*\\d{4}-\\d{2}-\\d{2})?\\s*$`,
+      `^##\\s+\\[?v?${escapeRegExp(versionDigits)}\\]?\\b(?:\\s*-\\s*\\d{4}-\\d{2}-\\d{2})?\\s*$`,
       'i'
     );
   } else {
@@ -126,70 +126,9 @@ function mergeIntoExisting(existing: string, newSection: string, version: string
     for (let i = startIdx + 1; i < lines.length; i++) {
       if (isVersionHeading(lines[i])) { endIdx = i; break; }
     }
-
-    if (mode === 'append') {
-      const existingSection = lines.slice(startIdx, endIdx);
-      const existingBullets = new Set(
-        existingSection
-          .filter(l => /^\s*-\s+/.test(l))
-          .map(l => l.trim())
-      );
-
-      // Extract new body (skip heading + optional compare link and leading blank)
-      const newLines = newSection.split('\n');
-      let idx = 0;
-      // Skip until first version heading
-      while (idx < newLines.length && !/^##\s+/.test(newLines[idx])) idx++;
-      if (idx < newLines.length) idx++; // skip the heading line
-      // Optionally skip compare link line
-      if (idx < newLines.length && /^\[.*\]\(.*\)\s*$/.test(newLines[idx])) idx++;
-      // Skip a single blank line
-      if (idx < newLines.length && newLines[idx].trim() === '') idx++;
-
-      // Collect category blocks and bullets, filtering duplicates
-      const outBlock: string[] = [];
-      let currentHeading: string | null = null;
-      let pendingBullets: string[] = [];
-      const flush = () => {
-        const newUnique = pendingBullets.filter(b => !existingBullets.has(b.trim()));
-        if (newUnique.length > 0) {
-          if (currentHeading) outBlock.push(currentHeading);
-          for (const b of newUnique) outBlock.push(b);
-          outBlock.push('');
-        }
-        pendingBullets = [];
-      };
-      for (; idx < newLines.length; idx++) {
-        const line = newLines[idx];
-        if (/^##\s+/.test(line)) break; // safety: next version
-        if (/^###\s+/.test(line)) {
-          flush();
-          currentHeading = line.trim();
-          continue;
-        }
-        if (/^\s*-\s+/.test(line)) {
-          pendingBullets.push(line.trim());
-          continue;
-        }
-        // Preserve blank lines only between blocks
-        if (line.trim() === '') continue;
-      }
-      flush();
-
-      if (outBlock.length === 0) {
-        // Nothing new; return unchanged
-        return existing;
-      }
-
-      const before = lines.slice(0, endIdx).join('\n');
-      const after = lines.slice(endIdx).join('\n');
-      const joiner = before.endsWith('\n') ? '' : '\n';
-      return [before, joiner, outBlock.join('\n').replace(/\n+$/,''), '\n', after].join('');
-    } else {
-      const before = lines.slice(0, startIdx).join('\n');
-      const after = lines.slice(endIdx).join('\n');
-      return [before, newSection.trim(), after].filter(Boolean).join('\n');
-    }
+    const before = lines.slice(0, startIdx).join('\n');
+    const after = lines.slice(endIdx).join('\n');
+    return [before, newSection.trim(), after].filter(Boolean).join('\n');
   }
 
   // Insert after first H1 if present
@@ -202,10 +141,6 @@ function mergeIntoExisting(existing: string, newSection: string, version: string
 
   // Default: prepend
   return newSection.trim() + '\n\n' + existing;
-}
-
-function toVersionHeading(version: string): string {
-  return `## ${version}`;
 }
 
 async function getLastTag(): Promise<string | null> {
@@ -266,6 +201,20 @@ function parseConventional(commit: CommitEntry): { type: string; scope?: string;
   return { type: 'other', subject: commit.subject, breaking };
 }
 
+// Infer a conventional commit type from a non-conventional commit subject
+function inferCategoryFromSubject(subject: string): string {
+  const s = subject.toLowerCase();
+  if (/\b(fix|bug|patch|resolve|correct)\b/i.test(s)) return 'Fixed';
+  if (/\b(feat|feature|add|implement|introduce)\b/i.test(s)) return 'Added';
+  if (/\b(refactor|simplify|restructure|cleanup)\b/i.test(s)) return 'Changed';
+  if (/\b(perf|performance|optimize)\b/i.test(s)) return 'Performance';
+  if (/\b(docs|readme|documentation)\b/i.test(s)) return 'Documentation';
+  if (/\b(test|spec)\b/i.test(s)) return 'Tests';
+  if (/\b(build|ci|pipeline)\b/i.test(s)) return 'Build';
+  if (/\b(revert)\b/i.test(s)) return 'Reverts';
+  return 'Other'; // Fallback
+}
+
 function categorizeCommits(commits: CommitEntry[]): Map<string, Array<{ scope?: string; subject: string }>> {
   const map = new Map<string, Array<{ scope?: string; subject: string }>>();
   const push = (cat: string, item: { scope?: string; subject: string }) => {
@@ -280,19 +229,23 @@ function categorizeCommits(commits: CommitEntry[]): Map<string, Array<{ scope?: 
       push('Breaking Changes', item);
       continue;
     }
+    let category: string;
     switch (p.type) {
-      case 'feat': push('Added', item); break;
-      case 'fix': push('Fixed', item); break;
-      case 'perf': push('Performance', item); break;
-      case 'refactor': push('Changed', item); break;
-      case 'docs': push('Documentation', item); break;
-      case 'test': push('Tests', item); break;
-      case 'build': push('Build', item); break;
-      case 'ci': push('CI', item); break;
-      case 'revert': push('Reverts', item); break;
-      case 'chore': push('Chore', item); break;
-      default: push('Other', item); break;
+      case 'feat': category = 'Added'; break;
+      case 'fix': category = 'Fixed'; break;
+      case 'perf': category = 'Performance'; break;
+      case 'refactor': category = 'Changed'; break;
+      case 'docs': category = 'Documentation'; break;
+      case 'test': category = 'Tests'; break;
+      case 'build': category = 'Build'; break;
+      case 'ci': category = 'CI'; break;
+      case 'revert': category = 'Reverts'; break;
+      case 'chore': category = 'Chore'; break;
+      default:
+        category = inferCategoryFromSubject(p.subject);
+        break;
     }
+    push(category, item);
   }
   return map;
 }
@@ -336,57 +289,16 @@ function buildChangelogPrompt(commits: CommitEntry[], versionLabel: string): str
 }
 
 async function completeWithEngine(config: Config, prompt: string): Promise<string> {
-  switch (config.engine) {
-    case 'ollama':
-      return completeWithOllama(config.model, prompt);
-    case 'openai':
-      return completeWithOpenAI(config, prompt);
-    case 'gemini':
-      return completeWithGemini(config, prompt);
-    case 'anthropic':
-      throw new Error('Anthropic engine for changelog not implemented');
-    default:
-      throw new Error('No engine available');
+  if (config.engine === 'none') {
+    throw new Error('No engine available');
   }
-}
-
-async function completeWithOllama(model: string, prompt: string): Promise<string> {
-  const endpoint = 'http://127.0.0.1:11434/api/generate';
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, prompt, stream: false, options: { temperature: 0.5, top_p: 0.9 } }),
-  });
-  if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
-  const data: any = await res.json();
-  const text = data?.response || '';
-  if (!text) throw new Error('Empty response from Ollama');
-  return String(text);
-}
-
-async function completeWithOpenAI(config: Config, prompt: string): Promise<string> {
-  const apiKey = config.openaiApiKey || process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('OPENAI_API_KEY not found');
-  const modelName = config.model && !config.model.includes(':') ? config.model : 'gpt-4o-mini';
-  const body = {
-    model: modelName,
-    temperature: 0.5,
-    top_p: 0.9,
-    messages: [
-      { role: 'system', content: 'You write crisp, well-structured changelog entries in Markdown.' },
-      { role: 'user', content: prompt },
-    ],
-  } as const;
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`OpenAI HTTP ${res.status}`);
-  const data: any = await res.json();
-  const text: string = data?.choices?.[0]?.message?.content ?? '';
-  if (!text) throw new Error('Empty response from OpenAI');
-  return text;
+  try {
+    const systemPrompt = 'You write crisp, well-structured changelog entries in Markdown.';
+    return await callLlmApi(config, { systemPrompt, userPrompt: prompt });
+  } catch (err) {
+    // Re-throw to be caught by the heuristic fallback logic
+    throw new Error(`LLM call failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 // Helpers for heading/date/compare links
@@ -446,24 +358,4 @@ function sanitizeSubject(subject: string): string {
   let s = subject.trim();
   s = s.replace(/[.;:!\s]+$/g, '');
   return s;
-}
-
-async function completeWithGemini(config: Config, prompt: string): Promise<string> {
-  const apiKey = config.geminiApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  if (!apiKey) throw new Error('GEMINI_API_KEY or GOOGLE_API_KEY not found');
-  const modelName = config.model && !config.model.includes(':') ? config.model : 'gemini-1.5-flash';
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.5, topP: 0.9 } } as const;
-  const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
-  const data: any = await res.json();
-  const first = data?.candidates?.[0];
-  let text = '';
-  if (first?.content?.parts && Array.isArray(first.content.parts)) {
-    text = first.content.parts.map((p: any) => p?.text || '').filter(Boolean).join('\n');
-  } else if (first?.output_text) {
-    text = first.output_text;
-  }
-  if (!text) throw new Error('Empty response from Gemini');
-  return text;
 }

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/// <reference types="node" />
 import { Command } from 'commander';
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
@@ -20,7 +21,6 @@ program
   .option('--max-len <number>', 'Max subject length')
   .option('--changelog [version]', 'Generate/update CHANGELOG.md (optional version label)')
   .option('--changelog-path <path>', 'Override changelog file path')
-  .option('--changelog-merge <mode>', 'Changelog merge strategy: replace|append')
   .option('--since <ref>', 'Generate changelog entries since Git ref (tag/commit)')
   .option('--release', 'Auto-bump version, update CHANGELOG, and create Git tag')
   .option('--bump <level>', 'Release bump: patch|minor|major (overrides auto-detect)')
@@ -89,7 +89,6 @@ program
             path: options.changelogPath || config.changelogPath,
             // Allow forcing full history via --since ""
             sinceRef: emptySinceToNull(options.since) ?? emptySinceToNull(config.changelogSince) ?? undefined,
-            merge: (options['changelogMerge'] === 'append' ? 'append' : undefined),
           });
           s.stop(result.written ? `Updated ${result.path}` : 'Changelog preview');
           if (result.preview) {
