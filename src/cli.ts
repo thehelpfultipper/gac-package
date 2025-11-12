@@ -20,6 +20,7 @@ program
   .option('--max-len <number>', 'Max subject length')
   .option('--changelog [version]', 'Generate/update CHANGELOG.md (optional version label)')
   .option('--changelog-path <path>', 'Override changelog file path')
+  .option('--changelog-merge <mode>', 'Changelog merge strategy: replace|append')
   .option('--since <ref>', 'Generate changelog entries since Git ref (tag/commit)')
   .option('--release', 'Auto-bump version, update CHANGELOG, and create Git tag')
   .option('--bump <level>', 'Release bump: patch|minor|major (overrides auto-detect)')
@@ -80,12 +81,15 @@ program
         const s = p.spinner();
         s.start('Generating changelog');
         try {
+          const emptySinceToNull = (val: any) => (typeof val === 'string' && val.trim() === '') ? null : val;
           const result = await upsertChangelog({
             config,
             versionLabel: typeof options.changelog === 'string' ? options.changelog : undefined,
             dryRun: !!config.dryRun,
             path: options.changelogPath || config.changelogPath,
-            sinceRef: options.since || config.changelogSince,
+            // Allow forcing full history via --since ""
+            sinceRef: emptySinceToNull(options.since) ?? emptySinceToNull(config.changelogSince) ?? undefined,
+            merge: (options['changelogMerge'] === 'append' ? 'append' : undefined),
           });
           s.stop(result.written ? `Updated ${result.path}` : 'Changelog preview');
           if (result.preview) {

@@ -16,6 +16,7 @@ interface Options {
   path?: string; // override path
   dryRun?: boolean;
   sinceRef?: string; // override since ref
+  merge?: 'replace' | 'append';
 }
 
 interface CommitEntry {
@@ -44,7 +45,9 @@ export async function upsertChangelog(opts: Options): Promise<ChangelogResult> {
     return { path, written: false, preview: newSection };
   }
 
-  const content = existed ? mergeIntoExisting(readFileSync(path, 'utf-8'), newSection, version) : buildNewFile(newSection);
+  const content = existed
+    ? mergeIntoExisting(readFileSync(path, 'utf-8'), newSection, version, opts.merge || 'replace')
+    : buildNewFile(newSection);
   writeFileSync(path, content, 'utf-8');
   return { path, written: true };
 }
@@ -93,16 +96,26 @@ function buildNewFile(section: string): string {
   return header + section.trim() + '\n';
 }
 
-function mergeIntoExisting(existing: string, newSection: string, version: string): string {
+function mergeIntoExisting(existing: string, newSection: string, version: string, mode: 'replace' | 'append' = 'replace'): string {
   // Replace the section matching the version heading (with optional date), else insert after top H1
   const lines = existing.split('\n');
 
   const escapeRegExp = (s: string) => s.replace(/[\-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-  const label = (version || '').replace(/^v?/, 'v');
-  const headingRe = new RegExp(
-    `^##\\s+\\[?${escapeRegExp(label)}\\]?\\b(?:\\s*-\\s*\\d{4}-\\d{2}-\\d{2})?\\s*$`,
-    'i'
-  );
+  const raw = (version || '').trim();
+  const semverMatch = raw.match(/^\[?v?(\d+\.\d+\.\d+)\]?/i);
+  let headingRe: RegExp;
+  if (/^unreleased\b/i.test(raw)) {
+    headingRe = new RegExp(`^##\\s+Unreleased\\b(?:\\s*-\\s*\\d{4}-\\d{2}-\\d{2})?\\s*$`, 'i');
+  } else if (semverMatch) {
+    const label = 'v' + semverMatch[1];
+    headingRe = new RegExp(
+      `^##\\s+\\[?${escapeRegExp(label)}\\]?\\b(?:\\s*-\\s*\\d{4}-\\d{2}-\\d{2})?\\s*$`,
+      'i'
+    );
+  } else {
+    // Fallback: match the raw string exactly
+    headingRe = new RegExp(`^##\\s+${escapeRegExp(raw)}\\s*$`, 'i');
+  }
   const isVersionHeading = (l: string) =>
     /^##\s+(?:\[?v?\d+\.\d+\.\d+\]?\b(?:\s*-\s*\d{4}-\d{2}-\d{2})?|Unreleased\b.*)$/i.test(l.trim());
 
@@ -113,9 +126,70 @@ function mergeIntoExisting(existing: string, newSection: string, version: string
     for (let i = startIdx + 1; i < lines.length; i++) {
       if (isVersionHeading(lines[i])) { endIdx = i; break; }
     }
-    const before = lines.slice(0, startIdx).join('\n');
-    const after = lines.slice(endIdx).join('\n');
-    return [before, newSection.trim(), after].filter(Boolean).join('\n');
+
+    if (mode === 'append') {
+      const existingSection = lines.slice(startIdx, endIdx);
+      const existingBullets = new Set(
+        existingSection
+          .filter(l => /^\s*-\s+/.test(l))
+          .map(l => l.trim())
+      );
+
+      // Extract new body (skip heading + optional compare link and leading blank)
+      const newLines = newSection.split('\n');
+      let idx = 0;
+      // Skip until first version heading
+      while (idx < newLines.length && !/^##\s+/.test(newLines[idx])) idx++;
+      if (idx < newLines.length) idx++; // skip the heading line
+      // Optionally skip compare link line
+      if (idx < newLines.length && /^\[.*\]\(.*\)\s*$/.test(newLines[idx])) idx++;
+      // Skip a single blank line
+      if (idx < newLines.length && newLines[idx].trim() === '') idx++;
+
+      // Collect category blocks and bullets, filtering duplicates
+      const outBlock: string[] = [];
+      let currentHeading: string | null = null;
+      let pendingBullets: string[] = [];
+      const flush = () => {
+        const newUnique = pendingBullets.filter(b => !existingBullets.has(b.trim()));
+        if (newUnique.length > 0) {
+          if (currentHeading) outBlock.push(currentHeading);
+          for (const b of newUnique) outBlock.push(b);
+          outBlock.push('');
+        }
+        pendingBullets = [];
+      };
+      for (; idx < newLines.length; idx++) {
+        const line = newLines[idx];
+        if (/^##\s+/.test(line)) break; // safety: next version
+        if (/^###\s+/.test(line)) {
+          flush();
+          currentHeading = line.trim();
+          continue;
+        }
+        if (/^\s*-\s+/.test(line)) {
+          pendingBullets.push(line.trim());
+          continue;
+        }
+        // Preserve blank lines only between blocks
+        if (line.trim() === '') continue;
+      }
+      flush();
+
+      if (outBlock.length === 0) {
+        // Nothing new; return unchanged
+        return existing;
+      }
+
+      const before = lines.slice(0, endIdx).join('\n');
+      const after = lines.slice(endIdx).join('\n');
+      const joiner = before.endsWith('\n') ? '' : '\n';
+      return [before, joiner, outBlock.join('\n').replace(/\n+$/,''), '\n', after].join('');
+    } else {
+      const before = lines.slice(0, startIdx).join('\n');
+      const after = lines.slice(endIdx).join('\n');
+      return [before, newSection.trim(), after].filter(Boolean).join('\n');
+    }
   }
 
   // Insert after first H1 if present
