@@ -338,8 +338,6 @@ When you run `gac`, you'll see an interactive menu:
 - ✓ Green checkmark - Under 72 characters (good)
 - ⚠ Yellow warning - Over 72 characters (consider regenerating)
 
-## Examples
-
 ## Changelog & Releases
 
 When to use which flag:
@@ -401,6 +399,8 @@ gac --changelog --changelog-path docs/CHANGELOG.md
 # Generate changes since a specific tag/commit
 gac --changelog --since v1.0.0
 ```
+
+## Examples
 
 ### Example 1: Quick commit with auto-prefix
 
