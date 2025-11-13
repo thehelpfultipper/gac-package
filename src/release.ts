@@ -21,13 +21,13 @@ export interface ReleaseResult {
   preview?: string;
 }
 
-export async function runRelease(opts: { 
-  config: Config; 
-  updatePkg?: boolean; 
-  dryRun?: boolean; 
-  bumpOverride?: Bump; 
-  releaseAs?: string; 
-  sinceRef?: string | null; 
+export async function runRelease(opts: {
+  config: Config;
+  updatePkg?: boolean;
+  dryRun?: boolean;
+  bumpOverride?: Bump;
+  releaseAs?: string;
+  sinceRef?: string | null;
 }): Promise<ReleaseResult> {
   const baseRef = typeof opts.sinceRef !== 'undefined' ? (opts.sinceRef || null) : await getLastSemverTag();
   const commits = await getCommitsSince(baseRef);
@@ -108,14 +108,47 @@ function stripV(v: string): string {
 
 function toTagged(v: string): string { return v.startsWith('v') ? v : `v${v}`; }
 
+function compareSemver(a: string, b: string): number {
+  return compareSemverTags(toTagged(a), toTagged(b));
+}
+
 async function getBaseVersion(lastTag: string | null): Promise<string> {
-  if (lastTag && isSemverTag(lastTag)) return stripV(lastTag);
-  // Fallback to package.json version
+  const versions: string[] = [];
+
+  // 1. From last tag
+  if (lastTag && isSemverTag(lastTag)) {
+    versions.push(stripV(lastTag));
+  }
+  // 2. From package.json
   try {
-    const pkg = JSON.parse(readFileSync('package.json', 'utf-8'));
-    if (pkg?.version && /\d+\.\d+\.\d+/.test(pkg.version)) return pkg.version;
-  } catch {}
-  return '0.0.0';
+    const pkgPath = 'package.json';
+    if (existsSync(pkgPath)) {
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+      if (pkg?.version && /\d+\.\d+\.\d+/.test(pkg.version)) {
+        versions.push(pkg.version);
+      }
+    }
+  } catch { }
+
+  // 3. From CHANGELOG.md headings
+  try {
+    const changelogPath = 'CHANGELOG.md'; // Assume common path for simplicity
+    if (existsSync(changelogPath)) {
+      const content = readFileSync(changelogPath, 'utf-8');
+      // Regex to find all `## [v1.2.3]` or `## v1.2.3` headings
+      const matches = content.matchAll(/^##\s+\[?v?(\d+\.\d+\.\d+)\]?/gm);
+      for (const match of matches) {
+        if (match[1]) versions.push(match[1]);
+      }
+    }
+  } catch { }
+  // If no versions found anywhere, start from 0.0.0
+  if (versions.length === 0) {
+    return '0.0.0';
+  }
+  // Sort all found versions semantically and return the highest one
+  versions.sort(compareSemver);
+  return versions[versions.length - 1];
 }
 
 async function getCommitsSince(ref: string | null): Promise<CommitEntry[]> {
@@ -180,6 +213,6 @@ async function createTag(tag: string): Promise<void> {
   try {
     const { stdout } = await execa('git', ['tag', '--list', tag]);
     if (stdout.trim() === tag) return;
-  } catch {}
+  } catch { }
   await execa('git', ['tag', '-a', tag, '-m', tag]);
 }
