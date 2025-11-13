@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.0.4 - 2025-11-13
+
+[Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.3...v1.0.4)
+
+### Documentation
+- Improve README
+
+### Other
+- Update changelog and package.json
+
 ## v1.0.3 - 2025-11-13
 
 [Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.2...v1.0.3)
