@@ -10,10 +10,10 @@ Smart, succinct Git commit messages - **free & local-first**
 
 ```bash
 # Install globally
-npm install -g gac
+npm install -g @thehelpfultipper/gac
 
 # Or try without installing
-npx gac
+npx @thehelpfultipper/gac
 ```
 
 ## Usage
