@@ -6,7 +6,7 @@ import { dirname, join } from "path";
 import { Command } from "commander";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import updateNotifier from "update-notifier";
+import updateCheck from "update-check";
 import { getStagedChanges, commitWithMessage } from "./git.js";
 import { generateCandidates } from "./generator.js";
 import { loadConfig } from "./config.js";
@@ -16,9 +16,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const pkgPath = join(__dirname, "..", "package.json");
 const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
-
-// Check for updates and notify the user if a new version is available.
-updateNotifier({ pkg }).notify();
 
 // A wrapper around `p.select` that adds single-character keyboard shortcuts.
 interface SelectOption {
@@ -189,6 +186,30 @@ program
     console.clear();
     p.intro(pc.bgCyan(pc.black(" gac ")));
 
+    // Start update check in the background. We'll await it before exiting.
+    const updateCheckPromise = Promise.race([
+      updateCheck(pkg).catch(() => null),
+      new Promise((resolve) => setTimeout(() => resolve(null), 2000)), // 2s timeout
+    ]);
+
+    const showUpdateNotification = async () => {
+      try {
+        const update = (await updateCheckPromise) as any;
+        if (update && update.latest && pkg.version !== update.latest) {
+          const { latest } = update;
+          const { version: current, name } = pkg;
+          const message = [
+            pc.yellow("Update available!"),
+            pc.gray(`${current} → ${pc.green(latest)}`),
+            `Run ${pc.cyan(`npm i -g ${name}`)} to update`,
+          ].join("\n");
+          p.note(message, "Update");
+        }
+      } catch (error) {
+        // Ignore errors from update check
+      }
+    };
+
     try {
       // Load config (merges with CLI options)
       const config = await loadConfig(options);
@@ -235,6 +256,8 @@ program
               p.note("package.json version updated", "Package");
           }
 
+          await showUpdateNotification();
+
           p.outro(
             pc.green(config.dryRun ? "Dry run complete" : "Release complete")
           );
@@ -276,6 +299,7 @@ program
           } else {
             p.note(`Path: ${result.path}`, "Changelog");
           }
+          await showUpdateNotification();
           p.outro(pc.green("Done"));
           process.exit(0);
         } catch (err: any) {
@@ -294,9 +318,10 @@ program
       if (!changes.hasStagedFiles) {
         s.stop("No staged changes found");
         p.note(
-          "Stage your changes first:\\n\\n  " + pc.cyan("git add <files>"),
+          "Stage your changes first: " + pc.cyan("git add <files>"),
           "Nothing to commit"
         );
+        await showUpdateNotification();
         p.outro(pc.yellow("Exiting..."));
         process.exit(0);
       }
@@ -374,6 +399,7 @@ program
         );
 
         if (action === "quit") {
+          await showUpdateNotification();
           p.outro(pc.yellow("Cancelled"));
           process.exit(0);
         }
@@ -423,6 +449,7 @@ program
 
         if (config.dryRun) {
           p.note(trimmedMessage, "Would commit with:");
+          await showUpdateNotification();
           p.outro(pc.green("Dry run complete"));
           process.exit(0);
         }
@@ -432,6 +459,7 @@ program
         await commitWithMessage(trimmedMessage);
         commit.stop("Committed successfully");
 
+        await showUpdateNotification();
         p.outro(pc.green("✓ Done!"));
         running = false;
       }

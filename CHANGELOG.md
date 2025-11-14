@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.0.6 - 2025-11-14
+
+[Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.5...v1.0.6)
+
+### Changed
+- Restructure package
+
+### Fixed
+- Fix auto update package
+
 ## v1.0.5 - 2025-11-14
 
 [Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.4...v1.0.5)
