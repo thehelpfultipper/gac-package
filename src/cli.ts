@@ -225,7 +225,9 @@ program
           summary.push(`Next: ${pc.bold(result.nextVersion)}`);
           p.note(summary.join("\n"), "Release");
 
-          if (result.preview) p.note(result.preview, "Changelog preview");
+          if (result.preview) {
+            p.log.message(result.preview);
+          }
 
           if (!config.dryRun) {
             p.note(`Tag created: ${result.tagCreated ? "yes" : "no"}`, "Tag");
@@ -270,7 +272,7 @@ program
             result.written ? `Updated ${result.path}` : "Changelog preview"
           );
           if (result.preview) {
-            p.note(result.preview, "Preview");
+            p.log.message(result.preview);
           } else {
             p.note(`Path: ${result.path}`, "Changelog");
           }
