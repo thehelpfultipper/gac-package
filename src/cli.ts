@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /// <reference types="node" />
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import { Command } from "commander";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
@@ -14,11 +14,126 @@ import { loadConfig } from "./config.js";
 // Read and parse package.json
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const pkgPath = join(__dirname, '..', 'package.json');
-const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+const pkgPath = join(__dirname, "..", "package.json");
+const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
 
 // Check for updates and notify the user if a new version is available.
 updateNotifier({ pkg }).notify();
+
+// A wrapper around `p.select` that adds single-character keyboard shortcuts.
+interface SelectOption {
+  value: string | symbol;
+  label: string;
+  hint?: string;
+}
+
+export async function selectWithShortcuts(
+  options: SelectOption[],
+  candidateOptions: SelectOption[]
+): Promise<string | symbol> {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    const stdout = process.stdout;
+
+    let index = 0;
+    const total = options.length;
+    let linesWritten = 0;
+
+    function render(): void {
+      if (linesWritten > 0) {
+        stdout.write(`\x1b[${linesWritten}A\x1b[J`);
+      }
+
+      let output = "";
+      const addLine = (str: string) => (output += str + "\n");
+
+      addLine(`${pc.cyan("◇")} ${pc.bold("Choose a commit message:")}`);
+      addLine("");
+
+      for (let i = 0; i < options.length; i++) {
+        const opt = options[i];
+        const isSelected = i === index;
+
+        const prefix = isSelected ? `${pc.cyan("❯")} ` : "  ";
+        const label = isSelected ? pc.cyan(opt.label) : pc.dim(opt.label);
+        const hint = opt.hint ? ` ${pc.dim(opt.hint)}` : "";
+
+        addLine(`${prefix}${label}${hint}`);
+      }
+
+      addLine("");
+      addLine(pc.dim("  Use ↑/↓, Enter, or shortcuts (1-3, r, p, q)"));
+
+      stdout.write(output);
+      linesWritten = output.split("\n").length - 1;
+    }
+
+    function cleanup(): void {
+      stdin.setRawMode(false);
+      stdin.removeListener("data", onKey);
+      stdin.pause();
+    }
+
+    function choose(value: string | symbol): void {
+      if (linesWritten > 0) {
+        stdout.write(`\x1b[${linesWritten}A\x1b[J`);
+      }
+      cleanup();
+      resolve(value);
+    }
+
+    function onKey(buffer: Buffer): void {
+      const key = buffer.toString();
+
+      // Arrow keys
+      if (buffer[0] === 0x1b && buffer[1] === 0x5b) {
+        if (buffer[2] === 0x41) {
+          // up
+          index = (index - 1 + total) % total;
+          render();
+          return;
+        }
+        if (buffer[2] === 0x42) {
+          // down
+          index = (index + 1) % total;
+          render();
+          return;
+        }
+      }
+
+      // Enter
+      if (buffer[0] === 0x0d) {
+        choose(options[index].value);
+        return;
+      }
+
+      // Ctrl+C
+      if (buffer[0] === 3) {
+        choose("quit");
+        return;
+      }
+
+      // r / p / q
+      if (key === "r") return choose("regenerate");
+      if (key === "p") return choose("prefix");
+      if (key === "q") return choose("quit");
+
+      // Numeric shortcuts 1–3
+      const num = parseInt(key, 10);
+      if (!isNaN(num) && num >= 1 && num <= candidateOptions.length) {
+        choose(candidateOptions[num - 1].value);
+        return;
+      }
+    }
+
+    // Enable raw input mode
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.on("data", onKey);
+
+    render();
+  });
+}
 
 const program = new Command();
 
@@ -30,7 +145,10 @@ program
   // Do not set defaults here; loadConfig provides defaults and merges with .gacrc/env
   .option("--style <type>", "Message style: plain|conv|gitmoji|mix")
   .option("--engine <name>", "Engine: ollama|openai|anthropic|gemini|none")
-  .option('--model <name>', 'Model name for LLM engine (Ollama, OpenAI, Gemini)')
+  .option(
+    "--model <name>",
+    "Model name for LLM engine (Ollama, OpenAI, Gemini)"
+  )
   .option("--max-len <number>", "Max subject length")
   .option(
     "--changelog [version]",
@@ -55,7 +173,9 @@ program
   )
   .option("--update-pkg", "Also update package.json version when releasing")
   .option("--dry-run", "Show message without committing")
-  .addHelpText('after', `
+  .addHelpText(
+    "after",
+    `
     Examples:
       $ gac                          # Generate commit message using default settings
       $ gac --style conv             # Generate a Conventional Commits style message
@@ -63,7 +183,8 @@ program
       $ gac --prefix "TICKET-42: "   # Add a prefix to the commit message
       $ gac --release --bump minor   # Create a new minor release (e.g., v1.1.0 -> v1.2.0)
       $ gac --changelog --dry-run    # Preview changelog without writing files or tagging
-  `)
+  `
+  )
   .action(async (options) => {
     console.clear();
     p.intro(pc.bgCyan(pc.black(" gac ")));
@@ -213,89 +334,55 @@ program
       let prefix = config.prefix || "";
       let running = true;
 
-      // Helper: allow quick single-key shortcuts while select is open
-      async function selectWithShortcuts(
-        options: { label: string; value: string }[]
-      ) {
-        // Allow aborting the prompt when a shortcut is pressed
-        const ac = new AbortController();
-        const selectPromise = p.select({
-          message: "Choose a commit message:",
-          options,
-          // @ts-ignore - signal is supported at runtime in clack
-          signal: ac.signal as any,
-        }) as Promise<string | symbol>;
-        // Race it against a raw keypress listener for 1/2/3/r/p/q
-        const keyPromise = new Promise<string>((resolve) => {
-          const handler = (chunk: Buffer) => {
-            const str = chunk.toString();
-            // Only react to single, printable characters
-            const key = str.length === 1 ? str : "";
-            if (key && ["1", "2", "3", "r", "p", "q"].includes(key)) {
-              // Detach listener and resolve immediately
-              process.stdin.off("data", handler);
-              // Abort the active select so it stops listening
-              try {
-                ac.abort();
-              } catch {}
-              resolve(key);
-            }
-          };
-          process.stdin.on("data", handler);
-          // Ensure cleanup if the select completes first
-          // Avoid keeping the listener around across iterations
-          selectPromise.finally(() => {
-            try {
-              process.stdin.off("data", handler);
-            } catch {}
-          });
-        });
-        // Whichever happens first wins
-        // Avoid unhandled rejection if aborted by keypress
-        selectPromise.catch(() => {});
-        const result = await Promise.race([selectPromise, keyPromise]);
-        return result as string | symbol;
-      }
-
       while (running) {
-        const previewMessages = candidates.map((msg, i) => {
+        const maxLen =
+          typeof config.maxLen === "number" && config.maxLen > 0
+            ? config.maxLen
+            : 72;
+
+        const candidateOptions = candidates.map((msg, i) => {
           const full = prefix + msg;
           const len = full.length;
-          const limit =
-            typeof config.maxLen === "number" && config.maxLen > 0
-              ? config.maxLen
-              : null;
-          const indicator =
-            !limit || len <= limit ? pc.green("✓") : pc.yellow("⚠");
-          const lengthLabel = limit
-            ? `(${len}/${limit} chars)`
-            : `(${len} chars)`;
-          return `${indicator} ${i + 1}. ${pc.bold(full)} ${pc.dim(
-            lengthLabel
-          )}`;
+          const indicator = len <= maxLen ? pc.green("✓") : pc.yellow("⚠");
+          const label = `${indicator} ${i + 1}. ${pc.bold(full)}`;
+          const hint = `(${len}/${maxLen} chars)`;
+          return { value: full, label, hint };
         });
 
-        const action = await selectWithShortcuts([
-          { value: "1", label: previewMessages[0] },
-          { value: "2", label: previewMessages[1] },
-          { value: "3", label: previewMessages[2] },
-          { value: "r", label: pc.cyan("↻ Regenerate new options") },
-          { value: "p", label: pc.magenta("✎ Set/change prefix") },
-          { value: "q", label: pc.red("✕ Quit without committing") },
-        ]);
+        const action = await selectWithShortcuts(
+          [
+            ...candidateOptions,
+            {
+              value: "regenerate",
+              label: pc.cyan("↻ Regenerate new options"),
+              hint: "(r)",
+            },
+            {
+              value: "prefix",
+              label: pc.magenta("✎ Set/change prefix"),
+              hint: "(p)",
+            },
+            {
+              value: "quit",
+              label: pc.red("✕ Quit without committing"),
+              hint: "(q)",
+            },
+          ],
+          candidateOptions
+        );
 
-        if (p.isCancel(action) || action === "q") {
+        if (action === "quit") {
           p.outro(pc.yellow("Cancelled"));
           process.exit(0);
         }
 
-        if (action === "r") {
+        if (action === "regenerate") {
           regen += 1;
           await generateNew();
           continue;
         }
 
-        if (action === "p") {
+        if (action === "prefix") {
           const newPrefix = await p.text({
             message: "Enter prefix (leave empty to clear):",
             placeholder: "JIRA-123: ",
@@ -310,28 +397,37 @@ program
           continue;
         }
 
-        // Commit selected message
-        // Ensure action is a string before parsing
-        const idx = parseInt(String(action)) - 1;
-        const message = prefix + candidates[idx];
+        // A commit message was selected, now allow editing.
+        // The value from p.select is the message string itself.
+        const selectedMessage = String(action);
+
+        const finalMessage = await p.text({
+          message: `Edit commit message ${pc.dim(
+            "(Enter to commit, Ctrl+C to go back)"
+          )}`,
+          initialValue: selectedMessage,
+          validate(value) {
+            if (value.trim().length === 0)
+              return "Commit message cannot be empty.";
+          },
+        });
+
+        if (p.isCancel(finalMessage)) {
+          // User pressed Esc, go back to selection.
+          continue;
+        }
+
+        const trimmedMessage = String(finalMessage).trim();
 
         if (config.dryRun) {
-          p.note(message, "Would commit with:");
+          p.note(trimmedMessage, "Would commit with:");
           p.outro(pc.green("Dry run complete"));
           process.exit(0);
         }
 
-        const confirm = await p.confirm({
-          message: `Commit with this message? ${pc.bold(message)}`,
-        });
-
-        if (p.isCancel(confirm) || !confirm) {
-          continue;
-        }
-
         const commit = p.spinner();
         commit.start("Committing");
-        await commitWithMessage(message);
+        await commitWithMessage(trimmedMessage);
         commit.stop("Committed successfully");
 
         p.outro(pc.green("✓ Done!"));

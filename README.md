@@ -25,7 +25,7 @@ git add .
 # Run gac (uses Ollama by default, falls back to heuristic if unavailable)
 gac
 
-# That's it! Choose from 3 AI-generated options
+# That's it! Choose an option, edit if needed, and commit.
 ```
 
 ## Features
@@ -35,7 +35,7 @@ gac
 - 🎯 **Smart fallback** - Works without any LLM installed
 - ⚡ **Fast** - Generates 3 options in seconds
 - 📏 **Convention-aware** - Supports Conventional Commits, Gitmoji, plain style
-- 🎨 **Interactive** - Choose, regenerate, or customize on the fly
+- 🎨 **Interactive** - Choose, edit, regenerate, or customize on the fly
 
 ## Command Options
 
@@ -316,27 +316,46 @@ ollama serve
 
 ## Interactive Mode
 
-When you run `gac`, you'll see an interactive menu:
+When you run `gac`, you'll see a two-step interactive menu.
+
+### 1. Choose a Message
+
+First, select a starting point from the generated options.
 
 ```
-? Choose a commit message:
-  ✓ 1. feat(auth): add session refresh on 401 response (50 chars)
-  ✓ 2. Add session refresh on 401 response (38 chars)
-  ⚠ 3. ✨ auth: implement automatic session refresh (73 chars)
-  ↻ Regenerate new options
-  ✎ Set/change prefix
-  ✕ Quit without committing
+◇ Choose a commit message:
+
+❯ ✓ 1. feat(auth): add session refresh on 401 response (50/72 chars)
+  ✓ 2. Add session refresh on 401 response (38/72 chars)
+  ⚠ 3. ✨ auth: implement automatic session refresh on token expiry (73/72 chars)
+  ↻ Regenerate new options (r)
+  ✎ Set/change prefix (p)
+  ✕ Quit without committing (q)
+
+  Use ↑/↓, Enter, or shortcuts (1-3, r, p, q)
 ```
 
 **Keys:**
-- **1, 2, 3** - Select that option and commit
+- **↑ / ↓** - Navigate options
+- **1, 2, 3 / Enter** - Select an option to proceed to the edit/confirm step
 - **r** - Regenerate 3 new options
 - **p** - Add/change prefix (e.g., add ticket number)
-- **q** - Quit without committing
+- **q / Ctrl+C** - Quit without committing
 
 **Indicators:**
-- ✓ Green checkmark - Under 72 characters (good)
-- ⚠ Yellow warning - Over 72 characters (consider regenerating)
+- **✓** Green checkmark - Under 72 characters (good)
+- **⚠** Yellow warning - Over 72 characters (consider regenerating)
+
+### 2. Edit and Confirm
+
+After selecting a message, you get a final chance to edit it before committing. This allows for quick tweaks or additions.
+
+```
+? Edit commit message: (Enter to commit, Ctrl+C to cancel)
+❯ feat(auth): add session refresh and handle 401 response
+```
+- **Enter** - Confirms and commits the message.
+- **Ctrl+C** - Cancels the edit and returns to the selection menu.
 
 ## Changelog & Releases
 
@@ -400,8 +419,6 @@ gac --changelog --changelog-path docs/CHANGELOG.md
 gac --changelog --since v1.0.0
 ```
 
-## Examples
-
 ### Example 1: Quick commit with auto-prefix
 
 ```bash
@@ -409,7 +426,9 @@ gac --changelog --since v1.0.0
 git add src/auth/login.ts
 gac
 # Auto-detects "PROJ-456: " prefix
-# Shows: "PROJ-456: feat(auth): add login form validation"
+# Select an option, then confirm or edit the final message:
+# ? Edit commit message: (Enter to commit)
+# ❯ PROJ-456: feat(auth): add login form validation
 ```
 
 ### Example 2: Force specific style
