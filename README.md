@@ -46,6 +46,7 @@ gac                          # Uses Ollama (default), auto-falls back to heurist
 gac --engine none            # Force heuristic mode (no LLM)
 gac --engine ollama          # Explicitly use Ollama
 gac --dry-run                # Preview without committing
+gac --help or -h                  # Show help and all available options
 ```
 
 ### Styling Options
@@ -62,6 +63,7 @@ gac --style gitmoji   # Only gitmoji format
 **Example outputs for each style:**
 
 **`--style mix`** (default - 3 different formats):
+
 ```
 1. feat(auth): add session refresh on 401 response
 2. Add session refresh on 401 response
@@ -69,6 +71,7 @@ gac --style gitmoji   # Only gitmoji format
 ```
 
 **`--style conv`** (Conventional Commits only):
+
 ```
 1. feat(auth): add session refresh on 401 response
 2. fix(auth): handle expired tokens correctly
@@ -76,6 +79,7 @@ gac --style gitmoji   # Only gitmoji format
 ```
 
 **`--style plain`** (plain imperative only):
+
 ```
 1. Add session refresh on 401 response
 2. Handle expired tokens correctly
@@ -83,6 +87,7 @@ gac --style gitmoji   # Only gitmoji format
 ```
 
 **`--style gitmoji`** (emoji-prefixed only):
+
 ```
 1. ✨ add session refresh on 401 response
 2. 🐛 handle expired tokens correctly
@@ -116,6 +121,7 @@ export GAC_MODEL="llama3.2:3b" && gac
 ```
 
 **Recommended models** (fastest to slowest):
+
 - `llama3.2:3b` - Fastest, great for quick commits
 - `phi3:3.8b` - Fast, good quality
 - `mistral:7b` - Default, balanced speed/quality
@@ -130,21 +136,23 @@ gac --max-len 100    # Longer messages (not recommended)
 
 ### Complete Flag Reference
 
-| Flag                    | Description                                                      | Default                        |
-| ----------------------- | ---------------------------------------------------------------- | ------------------------------ |
-| `--style <type>`        | Message style: `plain`, `conv`, `gitmoji`, or `mix`              | `mix`                          |
-| `--engine <name>`       | Engine: `ollama`, `openai`, `gemini`, or `none`                   | `ollama`                       |
-| `--model <name>`        | Model name (for Ollama, OpenAI, or Gemini)                       | `mistral:7b`                   |
-| `--max-len <num>`       | Max subject line length                                          | `72`                           |
-| `--dry-run`             | Preview without committing or releasing                          | `false`                        |
-| `--prefix <text>`       | Prefix for commit message                                        | `""` (auto-detects from branch) |
-| `--changelog [version]` | Generate/update `CHANGELOG.md` (optional version label)          | —                              |
-| `--changelog-path <path>` | Override changelog file path                                     | auto-detect                    |
-| `--since <ref>`         | Generate changelog since a specific Git ref (tag/commit)         | latest tag/heading             |
-| `--release`             | Auto-bump version, update changelog, and create Git tag          | —                              |
-| `--bump <level>`        | With `--release`, force bump: `patch`, `minor`, or `major`       | auto-detect                    |
-| `--release-as <version>` | With `--release`, set exact version (e.g., `v1.2.3`)             | auto-detect                    |
-| `--update-pkg`          | With `--release`, also update `package.json` version             | `false`                        |
+| Flag                      | Description                                                | Default                         |
+| ------------------------- | ---------------------------------------------------------- | ------------------------------- |
+| `--style <type>`          | Message style: `plain`, `conv`, `gitmoji`, or `mix`        | `mix`                           |
+| `--engine <name>`         | Engine: `ollama`, `openai`, `gemini`, or `none`            | `ollama`                        |
+| `--model <name>`          | Model name (for Ollama, OpenAI, or Gemini)                 | `mistral:7b`                    |
+| `--max-len <num>`         | Max subject line length                                    | `72`                            |
+| `--dry-run`               | Preview without committing or releasing                    | `false`                         |
+| `--prefix <text>`         | Prefix for commit message                                  | `""` (auto-detects from branch) |
+| `--changelog [version]`   | Generate/update `CHANGELOG.md` (optional version label)    | —                               |
+| `--changelog-path <path>` | Override changelog file path                               | auto-detect                     |
+| `--since <ref>`           | Generate changelog since a specific Git ref (tag/commit)   | latest tag/heading              |
+| `--release`               | Auto-bump version, update changelog, and create Git tag    | —                               |
+| `--bump <level>`          | With `--release`, force bump: `patch`, `minor`, or `major` | auto-detect                     |
+| `--release-as <version>`  | With `--release`, set exact version (e.g., `v1.2.3`)       | auto-detect                     |
+| `--update-pkg`            | With `--release`, also update `package.json` version       | `false`                         |
+| `-h`, `--help`            | Show help and all available options                        | —                               |
+| `-V`, `--version`         | Show version number                                        | —                               |
 
 ## Engine Behavior
 
@@ -175,6 +183,7 @@ The heuristic mode is smart enough that many users prefer it over LLM generation
 ### OpenAI Engine
 
 > Security warning:
+>
 > - Do not commit API keys to version control.
 > - Prefer environment variables; if you use a local `.gacrc`, keep it out of git (this repo's `.gitignore` includes `.gacrc`).
 
@@ -188,13 +197,15 @@ gac --engine openai --model gpt-4o
 ```
 
 Notes:
+
 - If `--model` looks like an Ollama model (contains `:`), `gac` defaults to `gpt-4o-mini` for OpenAI.
- - The same prompt/formatting as Ollama is used; output is exactly 3 one-line subjects.
- - You can also store the key in config (see Configuration) as `openaiApiKey`.
+- The same prompt/formatting as Ollama is used; output is exactly 3 one-line subjects.
+- You can also store the key in config (see Configuration) as `openaiApiKey`.
 
 ### Gemini Engine
 
 > Security warning:
+>
 > - Do not commit API keys to version control.
 > - Prefer environment variables; if you use a local `.gacrc`, keep it out of git.
 
@@ -208,6 +219,7 @@ gac --engine gemini --model gemini-1.5-pro
 ```
 
 Notes:
+
 - If `--model` looks like an Ollama model (contains `:`), `gac` defaults to `gemini-1.5-flash` for Gemini.
 - Same prompt/formatting as other engines; output is exactly 3 one-line subjects.
 - You can also store the key in config (see Configuration) as `geminiApiKey`.
@@ -279,6 +291,7 @@ Settings are merged in this order (highest priority last):
 5.  Command-line flags (highest priority)
 
 **Example:**
+
 ```bash
 # .gacrc says model: "mistral:7b"
 # But CLI flag overrides it:
@@ -336,6 +349,7 @@ First, select a starting point from the generated options.
 ```
 
 **Keys:**
+
 - **↑ / ↓** - Navigate options
 - **1, 2, 3 / Enter** - Select an option to proceed to the edit/confirm step
 - **r** - Regenerate 3 new options
@@ -343,6 +357,7 @@ First, select a starting point from the generated options.
 - **q / Ctrl+C** - Quit without committing
 
 **Indicators:**
+
 - **✓** Green checkmark - Under 72 characters (good)
 - **⚠** Yellow warning - Over 72 characters (consider regenerating)
 
@@ -354,6 +369,7 @@ After selecting a message, you get a final chance to edit it before committing. 
 ? Edit commit message: (Enter to commit, Ctrl+C to cancel)
 ❯ feat(auth): add session refresh and handle 401 response
 ```
+
 - **Enter** - Confirms and commits the message.
 - **Ctrl+C** - Cancels the edit and returns to the selection menu.
 
@@ -362,6 +378,7 @@ After selecting a message, you get a final chance to edit it before committing. 
 When to use which flag:
 
 - `gac --changelog [version]`
+
   - Use to generate or update `CHANGELOG.md` without tagging.
   - Great for previewing (`--dry-run`) or preparing notes before a release.
   - If `version` is provided (e.g., `v1.2.3`), inserts/replaces that section.
@@ -377,9 +394,11 @@ When to use which flag:
   - Add `--update-pkg` to also bump `package.json`’s `version` to `X.Y.Z`.
 
 Are these redundant?
+
 - No. `--release` includes changelog generation but also handles bumping and tagging. `--changelog` is for manual or ad‑hoc changelog updates (preview, custom label/path/range) without touching tags or versions.
 
 How versioning is determined (`--release`)
+
 - Base version source: the most recent semver Git tag matching `vX.Y.Z`. If none, falls back to `package.json`’s `version` or `0.0.0`.
 - You can control the target in three ways:
   - Explicit target: `--release-as vX.Y.Z`
@@ -388,11 +407,13 @@ How versioning is determined (`--release`)
 - Next version: tags as `vX.Y.Z` and optionally updates `package.json` with `--update-pkg`.
 
 Changelog formatting basics
+
 - Groups entries into sections (Breaking Changes, Added, Changed, Fixed, etc.).
 - Adds date to headings; includes a repository compare link when possible.
 - Detects breaking changes via `!` after type or `BREAKING CHANGE(S):` in body.
 
 Examples
+
 ```bash
 # Preview changelog entries since last tag without writing
 gac --changelog --dry-run
@@ -467,23 +488,28 @@ gac --engine none
 ## Troubleshooting
 
 **"Ollama unavailable, using heuristic fallback"**
+
 - Ollama isn't running - start with `ollama serve`
 - Wrong model name - check available models with `ollama list`
 - Port conflict - ensure 11434 is free
 
 **"Nothing staged"**
+
 - Run `git add <files>` before using gac
 
 **Messages are too long**
+
 - Use `--max-len 50` for shorter messages
 - Regenerate until you get a shorter option
 
 **Slow generation**
+
 - Switch to smaller model: `--model llama3.2:3b`
 - Keep model loaded: `export OLLAMA_KEEP_ALIVE=1h`
 - Use `--engine none` for instant heuristic mode
 
 **Secrets in config**
+
 - Prefer environment variables for API keys in shared repos.
 - If you store keys in `.gacrc`, add it to `.gitignore` so it isn’t committed.
 
