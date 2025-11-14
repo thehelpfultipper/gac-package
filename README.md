@@ -16,16 +16,14 @@ npm install -g @thehelpfultipper/gac
 npx @thehelpfultipper/gac
 ```
 
-### GitHub Release Note
-
-This version introduces automatic update checks.
-If you installed an older version, run:
-
-```bash
-npm install -g @thehelpfultipper/gac
-```
-
-to enable future update notifications.
+> [!IMPORTANT]
+> **Update Required for Notifications**
+>
+> Version 1.0.6 introduces automatic update checks. If you installed `gac` before this version, you **must** update to at least this version if not newer to receive future notifications:
+>
+> ```bash
+> npm install -g @thehelpfultipper/gac
+> ```
 
 ## Usage
 
