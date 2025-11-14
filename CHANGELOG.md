@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.0.5 - 2025-11-14
+
+[Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.4...v1.0.5)
+
+### Added
+- Add auto update for package and helper flag
+
+### Changed
+- Restructure package
+
+### Fixed
+- Restructure cli to resolve changelog preview
+- Fix cli to support key overrides for custom user interaction
+- Fix engines and dependencies
+
+### Documentation
+- Improve README
+
+### Other
+- Improve commit confirmation to enable editing
+- Improve LICENSE
+
 ## v1.0.4 - 2025-11-13
 
 [Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.3...v1.0.4)
