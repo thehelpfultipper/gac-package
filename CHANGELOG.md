@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.0.8 - 2025-11-17
+
+[Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.5...v1.0.8)
+
+### Added
+- Add extractKeyEntities function optimizing heuristic engine
+
+### Changed
+- Restructure package
+
+### Fixed
+- Fix auto update package
+
+### Documentation
+- Improve README with update notice
+- Improve README
+
+### Other
+- Tune heuristic engine regeneration
+
 ## v1.0.7 - 2025-11-14
 
 [Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.5...v1.0.7)
