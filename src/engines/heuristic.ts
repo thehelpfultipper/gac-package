@@ -7,7 +7,33 @@ interface ExtractedEntities {
   components: string[];
   variables: string[];
   dependencies: string[];
+  removedDependencies: string[];
   hasErrorHandling: boolean;
+}
+
+/**
+ * A helper to format a list of code entities into a human-readable string.
+ */
+function formatEntityList(
+  items: string[],
+  singular: string,
+  plural: string
+): string {
+  if (items.length === 0) return "";
+  if (items.length === 1) return `${singular} ${items[0]}`;
+  if (items.length <= 3) return `${plural} ${items.join(", ")}`;
+  return `multiple ${plural}`;
+}
+
+/**
+ * A helper to clean a file name for use in a commit message.
+ * e.g., `_prism.scss` -> `prism`
+ */
+function cleanFileName(name: string): string {
+  return (name || "")
+    .replace(/^_/, "")
+    .replace(/\.(s?css|js|php|ts|md)$/, "")
+    .replace(/[-_]/g, " ");
 }
 
 /**
@@ -20,6 +46,7 @@ function extractKeyEntities(diff: string, files: any[]): ExtractedEntities {
     components: new Set<string>(),
     variables: new Set<string>(),
     dependencies: new Set<string>(),
+    removedDependencies: new Set<string>(),
   };
   let hasErrorHandling = false;
 
@@ -69,27 +96,41 @@ function extractKeyEntities(diff: string, files: any[]): ExtractedEntities {
     }
   }
 
+  // Improved package.json dependency extraction
   const pkgJsonFile = files.find((f) => f.path.endsWith("package.json"));
   if (pkgJsonFile) {
     const fileDiff = getDiffForFile(diff, "package.json");
     const diffLines = fileDiff.split("\n");
-    let inDepsBlock = false;
+    let inDependenciesBlock = false;
+
     for (const line of diffLines) {
-      // This heuristic tracks whether the current context of the diff is inside a
-      // dependencies block. It resets when it sees another common top-level key.
-      const contentLine = line.startsWith(" ") ? line.slice(1) : line;
-      if (
-        /^"((dev|peer|optional)?[dD]ependencies|scripts|engines|files|exports|imports)"/.test(
-          contentLine.trim()
-        )
-      ) {
-        inDepsBlock = /dependencies/i.test(contentLine);
+      // Crude state machine to track if we're inside a dependencies block
+      const isDepBlockHeader =
+        /"((dev|peer|optional)?[dD]ependencies)"\s*:\s*\{/.test(line);
+      if (isDepBlockHeader) {
+        inDependenciesBlock = true;
+        continue;
+      }
+      if (inDependenciesBlock && line.match(/^\s*\}/)) {
+        inDependenciesBlock = false;
+        continue;
       }
 
-      if (inDepsBlock && line.startsWith("+")) {
-        const depMatch = line.match(/^\+\s*"([^"]+)"\s*:/);
+      if (inDependenciesBlock) {
+        const depMatch = line.match(/^([+-])\s*"([^"]+)"\s*:/);
         if (depMatch) {
-          entities.dependencies.add(depMatch[1]);
+          const sign = depMatch[1];
+          const depName = depMatch[2];
+          if (sign === "+") {
+            entities.dependencies.add(depName);
+            // If a dep is both removed and added (version bump), treat as addition.
+            entities.removedDependencies.delete(depName);
+          } else if (sign === "-") {
+            // Only add to removed if not also added.
+            if (!entities.dependencies.has(depName)) {
+              entities.removedDependencies.add(depName);
+            }
+          }
         }
       }
     }
@@ -101,6 +142,7 @@ function extractKeyEntities(diff: string, files: any[]): ExtractedEntities {
     components: Array.from(entities.components),
     variables: Array.from(entities.variables),
     dependencies: Array.from(entities.dependencies),
+    removedDependencies: Array.from(entities.removedDependencies),
     hasErrorHandling,
   };
 }
@@ -185,9 +227,11 @@ export async function generateHeuristic(
       }`;
       const docsPhrase =
         docTopic || (docsScope === "readme" ? "README" : "docs");
-      const right = `docs${
-        docsScope ? `(${docsScope})` : ""
-      }: update ${docsPhrase}`;
+      const right = `docs${docsScope ? `(${docsScope})` : ""}: ${pickVerb(
+        "docs",
+        "docs",
+        variant
+      )} ${docsPhrase}`;
       candidates.push(`${left}; ${right}`);
     } else {
       const finalType = docsSignificant ? "docs" : type;
@@ -412,41 +456,119 @@ function buildIntelligentSubject(
   files: any[],
   variant: number
 ): { verb: string; noun: string } {
-  const verb = getDefaultVerb(type, variant);
+  // Handle file replacements for refactors
+  const addedFiles = files.filter((f) => f.status === "A");
+  const deletedFiles = files.filter((f) => f.status === "D");
 
-  if (entities.dependencies.length > 0) {
-    const deps = entities.dependencies;
-    if (deps.length === 1)
-      return { verb: "update", noun: `dependency ${deps[0]}` };
-    if (deps.length <= 3)
-      return { verb: "update", noun: `dependencies ${deps.join(", ")}` };
-    return { verb: "update", noun: `${deps.length} dependencies` };
+  if (
+    type === "refactor" &&
+    addedFiles.length === 1 &&
+    deletedFiles.length === 1
+  ) {
+    const addedName = cleanFileName(addedFiles[0].path.split("/").pop() || "");
+    const deletedName = cleanFileName(
+      deletedFiles[0].path.split("/").pop() || ""
+    );
+    if (addedName && deletedName) {
+      return { verb: "replace", noun: `${deletedName} with ${addedName}` };
+    }
   }
+
+  // Handle dependency changes
+  if (
+    entities.dependencies.length > 0 &&
+    entities.removedDependencies.length > 0
+  ) {
+    return { verb: "manage", noun: "dependencies" };
+  }
+  if (entities.dependencies.length > 0) {
+    return {
+      verb: "add",
+      noun: formatEntityList(
+        entities.dependencies,
+        "dependency",
+        "dependencies"
+      ),
+    };
+  }
+  if (entities.removedDependencies.length > 0) {
+    return {
+      verb: "remove",
+      noun: formatEntityList(
+        entities.removedDependencies,
+        "dependency",
+        "dependencies"
+      ),
+    };
+  }
+
+  const verb = getDefaultVerb(type, variant);
 
   const newCount =
     entities.components.length +
     entities.classes.length +
     entities.functions.length;
+
   if (type === "feat" && newCount > 0) {
     if (entities.components.length > 0)
-      return { verb: "add", noun: `${entities.components[0]} component` };
+      return {
+        verb: "add",
+        noun: formatEntityList(entities.components, "component", "components"),
+      };
     if (entities.classes.length > 0)
-      return { verb: "add", noun: `${entities.classes[0]} class` };
+      return {
+        verb: "add",
+        noun: formatEntityList(entities.classes, "class", "classes"),
+      };
     if (entities.functions.length > 0)
-      return { verb: "add", noun: `${entities.functions[0]} function` };
+      return {
+        verb: "add",
+        noun: formatEntityList(entities.functions, "function", "functions"),
+      };
   }
 
   if (type === "refactor" && newCount > 0) {
     if (entities.components.length > 0)
-      return { verb: "refactor", noun: `${entities.components[0]} component` };
+      return {
+        verb: "refactor",
+        noun: formatEntityList(entities.components, "component", "components"),
+      };
     if (entities.classes.length > 0)
-      return { verb: "refactor", noun: `${entities.classes[0]} class` };
+      return {
+        verb: "refactor",
+        noun: formatEntityList(entities.classes, "class", "classes"),
+      };
     if (entities.functions.length > 0)
-      return { verb: "refactor", noun: `${entities.functions[0]} function` };
+      return {
+        verb: "refactor",
+        noun: formatEntityList(entities.functions, "function", "functions"),
+      };
+  }
+
+  if (
+    type === "fix" &&
+    entities.hasErrorHandling &&
+    entities.functions.length > 0
+  ) {
+    return {
+      verb: "fix",
+      noun: `error handling in ${formatEntityList(
+        entities.functions,
+        "function",
+        "functions"
+      )}`,
+    };
   }
 
   if (type === "fix" && entities.functions.length > 0) {
-    return { verb: "fix", noun: `error in ${entities.functions[0]} function` };
+    return {
+      verb: "fix",
+      noun: `issue in ${formatEntityList(
+        entities.functions,
+        "function",
+        "functions"
+      )}`,
+    };
   }
 
   const catNoun = buildCategoryNoun(files);
@@ -476,7 +598,26 @@ function detectChangeType(
   primaryFocus: ReturnType<typeof detectPrimaryFocus>
 ): string {
   if (files.every((f) => isDocFile(f.path))) return "docs";
-  if (entities.dependencies.length > 0) return "chore";
+
+  // Detect refactor from file add/delete pairs in the same directory
+  const addedFiles = files.filter((f) => f.status === "A");
+  const deletedFiles = files.filter((f) => f.status === "D");
+  if (addedFiles.length > 0 && deletedFiles.length > 0) {
+    const addedDirs = new Set(
+      addedFiles.map((p) => p.path.substring(0, p.path.lastIndexOf("/")))
+    );
+    const deletedDirs = new Set(
+      deletedFiles.map((p) => p.path.substring(0, p.path.lastIndexOf("/")))
+    );
+    const commonDirs = [...addedDirs].filter((d) => deletedDirs.has(d));
+    if (commonDirs.length > 0) return "refactor";
+  }
+
+  if (
+    entities.dependencies.length > 0 ||
+    entities.removedDependencies.length > 0
+  )
+    return "chore";
   if (primaryFocus.focus.includes("refactor")) return "refactor";
   if (entities.hasErrorHandling) return "fix";
 
@@ -515,6 +656,8 @@ function detectScope(files: any[]): string {
     config: /\b(config|setting|env)\b/,
     ci: /\.github|\.gitlab/,
     ui: /\b(ui|components|views|pages)\b/,
+    styles: /\b(css|scss|styles|theme)\b/,
+    theme: /\b(theme|assets)\b/,
   };
 
   const counts: Record<string, number> = {};
@@ -543,10 +686,11 @@ function buildCategoryNoun(files: any[]): string {
   const cats = categorizeFiles(files);
   if (cats.size === 0) return "";
   const entries = Array.from(cats.entries()).sort((a, b) => b[1] - a[1]);
-  const top = entries.slice(0, 2).map(([k]) => k);
+  const top = entries.slice(0, 3).map(([k]) => k); // Increased to 3
   const parts = top.map((k) => prettifyCategory(k)).filter(Boolean);
   if (parts.length === 1) return parts[0];
   if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  if (parts.length === 3) return `${parts[0]}, ${parts[1]}, and ${parts[2]}`;
   return "multiple components";
 }
 
@@ -555,12 +699,17 @@ function prettifyCategory(category: string): string {
     engine: "engines",
     cli: "CLI",
     api: "API",
-    ui: "UI",
+    ui: "UI components",
     config: "configuration",
+    build: "build process",
     ci: "CI",
     dependencies: "dependencies",
     git: "Git logic",
     generator: "generator",
+    styles: "styles",
+    scripts: "scripts",
+    php: "PHP logic",
+    tests: "tests",
   };
   return mapping[category] || category;
 }
@@ -576,6 +725,22 @@ function categorizeFiles(files: any[]): Map<string, number> {
       /(package\.json|pnpm-lock\.yaml|yarn\.lock|package-lock\.json)/.test(path)
     )
       category = "dependencies";
+    else if (/\.(css|scss|less|styl)/.test(path)) category = "styles";
+    else if (
+      /\.(ts|js)$/.test(path) &&
+      !/\.(spec|test)\.(ts|js)$/.test(path) &&
+      !path.includes("/components/")
+    )
+      category = "scripts";
+    else if (/\.php$/.test(path)) category = "php";
+    else if (
+      /(purgecss|tailwind|webpack|vite|postcss|eslint|prettier|babel|jest)\.config\.(js|ts|json)/.test(
+        path
+      ) ||
+      path.endsWith(".eslintrc.json") ||
+      path.endsWith(".prettierrc")
+    )
+      category = "build";
     else if (path.includes("/engines/")) category = "engine";
     else if (path.includes("/cli")) category = "cli";
     else if (path.includes("/git")) category = "git";
@@ -583,8 +748,9 @@ function categorizeFiles(files: any[]): Map<string, number> {
     else if (/\.(tsx|jsx)$/.test(path)) category = "ui";
     else if (/\.test\.|\.spec\.|__tests__/.test(path)) category = "tests";
     else if (isDocFile(path)) category = "docs";
-    else if (/api|route|endpoint/.test(path)) category = "api";
-    else if (/config|settings/.test(path)) category = "config";
+    else if (/api|route|endpoint|server/.test(path)) category = "api";
+    else if (/config|settings|env/.test(path) && category !== "build")
+      category = "config"; // don't override build config
 
     categories.set(category, (categories.get(category) || 0) + weight);
   }
@@ -625,14 +791,38 @@ function pickVerb(
   variant: number
 ): string {
   const pools: Record<string, string[]> = {
-    docs: ["clarify", "update", "improve", "refine"],
-    refactor: ["refactor", "simplify", "restructure"],
-    chore: ["update", "maintain", "tune"],
-    feat: ["add", "implement", "introduce"],
-    fix: ["fix", "resolve", "correct"],
-    test: ["test", "add tests for", "verify"],
-    style: ["style", "format", "lint"],
-    default: ["update", "improve", "modify"],
+    docs: [
+      "document",
+      "clarify",
+      "update",
+      "improve",
+      "refine",
+      "add docs for",
+      "explain",
+    ],
+    refactor: [
+      "refactor",
+      "simplify",
+      "restructure",
+      "reorganize",
+      "cleanup",
+      "improve",
+      "streamline",
+    ],
+    chore: ["update", "maintain", "tune", "adjust", "manage"],
+    feat: ["add", "implement", "introduce", "create", "build", "develop"],
+    fix: [
+      "fix",
+      "resolve",
+      "correct",
+      "patch",
+      "address",
+      "mitigate",
+      "prevent",
+    ],
+    test: ["test", "add tests for", "verify", "cover", "ensure"],
+    style: ["style", "format", "lint", "reformat", "apply style"],
+    default: ["update", "improve", "modify", "adjust", "enhance"],
   };
   const key =
     domain === "docs"
