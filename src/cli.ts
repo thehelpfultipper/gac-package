@@ -138,6 +138,7 @@ program
   .usage("[options]")
   .description("Smart, succinct Git commit messages")
   .version(pkg.version)
+  .showSuggestionAfterError()
   .option("--prefix <text>", 'Prefix for commit message (e.g., "JIRA-123: ")')
   // Do not set defaults here; loadConfig provides defaults and merges with .gacrc/env
   .option("--style <type>", "Message style: plain|conv|gitmoji|mix")

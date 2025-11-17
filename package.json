@@ -1,6 +1,6 @@
 {
   "name": "@thehelpfultipper/gac",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Smart, succinct Git commit messages - free & local-first",
   "main": "dist/index.js",
   "bin": {
@@ -19,6 +19,7 @@
     "prepublishOnly": "npm run build",
     "test": "node --test",
     "dev-link": "(npm unlink -g @thehelpfultipper/gac || true) && (npm uninstall -g @thehelpfultipper/gac || true) && npm run build && npm link",
+    "is-dev-link": "npm ls -g --depth=0",
     "dev-unlink": "npm unlink -g @thehelpfultipper/gac && npm install -g @thehelpfultipper/gac"
   },
   "keywords": [

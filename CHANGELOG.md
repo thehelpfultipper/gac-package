@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.0.9 - 2025-11-17
+
+[Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.8...v1.0.9)
+
+### Added
+- Add functions formatEntityList, cleanFileName
+
+### Other
+- Update dependencies and refine v1.0.8 - 2025-11-17
+
 ## v1.0.8 - 2025-11-17
 
 [Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.5...v1.0.8)
@@ -121,3 +131,4 @@
 
 ## Fixed
 - selectWithShortcuts in CLI
+
