@@ -183,7 +183,14 @@ program
       $ gac --changelog --dry-run    # Preview changelog without writing files or tagging
   `
   )
-  .action(async (options) => {
+  .action(async (options, command) => {
+    // Check for unknown commands/arguments.
+    if (command.args.length > 0) {
+        p.log.error(`Unknown command: "${command.args[0]}"`);
+        p.outro(`For a full list of options, run ${pc.cyan("gac --help")}`);
+        process.exit(1);
+    }
+
     console.clear();
     p.intro(pc.bgCyan(pc.black(" gac ")));
 
@@ -472,4 +479,32 @@ program
     }
   });
 
-program.parse();
+// Pre-process arguments to handle single-dash long options and typos
+const rawArgs = process.argv.slice(2);
+const correctedArgs: string[] = [];
+const knownLongOpts = program.options.map(opt => opt.long).filter(Boolean);
+
+for (const arg of rawArgs) {
+    // Check for arguments that look like single-dash long options (e.g., "-changelog").
+    // Standard short options (-h) or negative numbers (-10) are ignored.
+    if (arg.startsWith('-') && !arg.startsWith('--') && arg.length > 2 && isNaN(parseFloat(arg))) {
+        const potentialLongOpt = '--' + arg.slice(1);
+        
+        // Case 1: Auto-correct if it's a known long option with a single dash.
+        if (knownLongOpts.includes(potentialLongOpt)) {
+            correctedArgs.push(potentialLongOpt);
+            continue;
+        }
+
+        // Case 2: It's a typo. Show a helpful error and exit.
+        // This prevents commander from misinterpreting "-changelog" as "-c -h -a..."
+        p.log.error(`Unknown option: "${arg}"`);
+        p.outro(`For a full list of options, run ${pc.cyan("gac --help")}`);
+        process.exit(1);
+    }
+    
+    // Argument is not a single-dash long option, so pass it through.
+    correctedArgs.push(arg);
+}
+
+program.parse([process.argv[0], process.argv[1], ...correctedArgs]);
