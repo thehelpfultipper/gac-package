@@ -110,7 +110,7 @@ export async function generateHeuristic(
   config: Config
 ): Promise<string[]> {
   const { files } = changes;
-  const variant = (config as any).regen ?? 0;
+  const variant = config.regen ?? 0;
 
   const entities = extractKeyEntities(changes.diff, files);
   const docsFiles = files.filter((f) => isDocFile(f.path));
@@ -146,7 +146,7 @@ export async function generateHeuristic(
     (codeFiles.length === 0 ||
       docWeight >= Math.ceil((codeWeight + docWeight) * docsThreshold));
 
-  const descriptions = buildDescriptions(
+  const allDescriptions = buildDescriptions(
     files,
     type,
     primaryFocus,
@@ -154,6 +154,19 @@ export async function generateHeuristic(
     entities,
     variant
   );
+  if (allDescriptions.length === 0) {
+    allDescriptions.push({ verb: "update", noun: "files" });
+  }
+
+  // On each regeneration, cycle which description is considered primary.
+  const primaryIndex = variant % allDescriptions.length;
+  // Reorder the array so the current primary is first.
+  const descriptions = [
+    allDescriptions[primaryIndex],
+    ...allDescriptions.slice(0, primaryIndex),
+    ...allDescriptions.slice(primaryIndex + 1),
+  ];
+
   const selectedDesc = descriptions[0];
 
   const candidates: string[] = [];
@@ -621,7 +634,12 @@ function pickVerb(
     style: ["style", "format", "lint"],
     default: ["update", "improve", "modify"],
   };
-  const key = domain === "docs" ? "docs" : type in pools ? type : "default";
+  const key =
+    domain === "docs"
+      ? "docs"
+      : Object.keys(pools).includes(type)
+      ? type
+      : "default";
   const pool = pools[key];
   return pool[variant % pool.length];
 }
