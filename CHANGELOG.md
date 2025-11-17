@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.0.10 - 2025-11-17
+
+[Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.9...v1.0.10)
+
+### Fixed
+- Fix cli scripts
+
+### Documentation
+- Update cli docs, dependencies, and scripts and document v1.0.9 - 2025-11-17
+
+### Other
+- Update dependencies
+- Clarify installation instructions
+
 ## v1.0.9 - 2025-11-17
 
 [Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.8...v1.0.9)

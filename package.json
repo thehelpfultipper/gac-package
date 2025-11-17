@@ -1,6 +1,6 @@
 {
   "name": "@thehelpfultipper/gac",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Smart, succinct Git commit messages - free & local-first",
   "main": "dist/index.js",
   "bin": {
