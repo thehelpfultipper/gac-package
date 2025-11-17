@@ -22,7 +22,7 @@ npx @thehelpfultipper/gac
 > Version 1.0.6 introduces automatic update checks. If you installed `gac` before this version, you **must** update to at least this version if not newer to receive future notifications:
 >
 > ```bash
-> npm install -g @thehelpfultipper/gac
+> npm install -g @thehelpfultipper/gac@1.0.6
 > ```
 
 ## Usage
