@@ -4,7 +4,7 @@
   "description": "Smart, succinct Git commit messages - free & local-first",
   "main": "dist/index.js",
   "bin": {
-    "gac": "./dist/cli.js"
+    "gac": "dist/cli.js"
   },
   "type": "module",
   "files": [
