@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.11 - 2025-11-20
+
+[Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.10...v1.0.11)
+
+### Documentation
+- Adjust docs and dependencies and improve v1.0.10 - 2025-11-17
+
+### Other
+- Update multiple engines buildPrompt to account for config settings
+- Update multiple engines to control for variance in AI response syntax
+
 ## v1.0.10 - 2025-11-17
 
 [Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.9...v1.0.10)
@@ -145,4 +156,5 @@
 
 ## Fixed
 - selectWithShortcuts in CLI
+
 
