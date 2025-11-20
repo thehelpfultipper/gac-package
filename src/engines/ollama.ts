@@ -14,7 +14,8 @@ export async function generateWithOllama(
     const text = await callLlmApi(config, { userPrompt: prompt });
 
     const lines = parseCandidates(text);
-    if (lines.length >= 3) return lines;
+    // We accept even a single valid candidate rather than failing hard
+    if (lines.length > 0) return lines;
 
-    throw new Error('Ollama response format unexpected');
+    throw new Error('Ollama response format unexpected: No valid commit messages found.');
 }

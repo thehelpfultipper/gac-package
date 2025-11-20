@@ -9,12 +9,12 @@ export async function generateWithOpenAI(
 ): Promise<string[]> {
   const context = buildContext(changes);
   const userPrompt = buildPrompt(changes, context);
-  const systemPrompt = 'You write succinct Git commit message subjects. Output exactly three lines as requested. Do not include explanations or extra lines.';
-  
-  const text = await callLlmApi(config, { systemPrompt, userPrompt });
-  
-  const lines = parseCandidates(text);
-  if (lines.length >= 3) return lines;
+  const systemPrompt = 'You write succinct Git commit message subjects. Output exactly three lines as requested. Do not include explanations, markdown blocks, or quotes.';
 
-  throw new Error('OpenAI response format unexpected');
+  const text = await callLlmApi(config, { systemPrompt, userPrompt });
+
+  const lines = parseCandidates(text);
+  if (lines.length > 0) return lines;
+
+  throw new Error('OpenAI response format unexpected: No valid commit messages found.');
 }

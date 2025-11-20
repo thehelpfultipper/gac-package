@@ -14,7 +14,7 @@ export async function generateWithGemini(
   const text = await callLlmApi(config, { userPrompt });
 
   const lines = parseCandidates(text);
-  if (lines.length >= 3) return lines;
+  if (lines.length > 0) return lines;
 
-  throw new Error('Gemini response format unexpected');
+  throw new Error('Gemini response format unexpected: No valid commit messages found.');
 }

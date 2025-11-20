@@ -48,16 +48,57 @@ export function buildPrompt(changes: StagedChanges, context: string): string {
     - Max 72 characters per line
     - Imperative mood (add, fix, update - not added, fixed, updated)
     - No trailing period
-    - No quotes
+    - No quotes around the messages
+    - No Markdown code blocks or backticks
+    - No conversational text (do not say "Here are the options")
     - Be specific and concise`;
 }
 
 export function parseCandidates(text: string): string[] {
-  const lines = String(text)
+  // Strip Markdown code blocks
+  let cleanText = text.replace(/```[\s\S]*?```/g, (match) => {
+    return match.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '');
+  });
+
+  // If no blocks were matched/replaced, but text contains isolated fences, strip them
+  if (cleanText === text) {
+    cleanText = text.replace(/^```[a-z]*$/gim, '');
+  }
+
+  const lines = cleanText
     .split('\n')
-    .map((l: string) => l.replace(/^\s*[-*]\s*/, '').replace(/^\d+\.\s*/, '').trim())
-    .filter((l: string) => l.length > 0)
-    .map((l: string) => capitalizeFirst(l));
-  return lines.slice(0, 3);
+    .map((l) => {
+      let line = l.trim();
+      // Remove markdown list markers (1., -, *)
+      line = line.replace(/^(\d+\.|[-*])\s+/, '');
+      // Remove prefixes like "Option 1:" or "Conventional:"
+      line = line.replace(/^(Option\s+\d+|Format\s+\d+|[a-zA-Z]+):[\s]*/i, (match) => {
+        // Don't strip "feat:" or "fix:", those are valid commit types.
+        if (match.toLowerCase().startsWith('feat') || match.toLowerCase().startsWith('fix')) return match;
+        return '';
+      });
+      // Remove outer quotes
+      line = line.replace(/^["']|["']$/g, '');
+      // Remove backticks wrapping the line
+      line = line.replace(/^`|`$/g, '');
+      return line.trim();
+    })
+    .filter((l) => {
+      if (l.length < 3) return false; // Too short
+      const lower = l.toLowerCase();
+      // Filter conversational filler
+      if (lower.startsWith('here are')) return false;
+      if (lower.startsWith('sure,')) return false;
+      if (lower.startsWith('certainly')) return false;
+      if (lower.startsWith('below are')) return false;
+      if (lower.startsWith('these are')) return false;
+      // Filter lines that are just labels
+      if (lower === 'conventional commits format' || lower === 'plain imperative format') return false;
+      return true;
+    })
+    .map((l) => capitalizeFirst(l));
+
+  // Deduplicate and limit to 3
+  return [...new Set(lines)].slice(0, 3);
 }
 
