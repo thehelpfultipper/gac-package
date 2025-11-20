@@ -8,7 +8,7 @@ export async function generateWithOllama(
     config: Config
 ): Promise<string[]> {
     const context = buildContext(changes);
-    const prompt = buildPrompt(changes, context);
+    const prompt = buildPrompt(changes, context, config);
 
     // Ollama's generate endpoint takes a single combined prompt
     const text = await callLlmApi(config, { userPrompt: prompt });

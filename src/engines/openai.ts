@@ -8,7 +8,7 @@ export async function generateWithOpenAI(
   config: Config
 ): Promise<string[]> {
   const context = buildContext(changes);
-  const userPrompt = buildPrompt(changes, context);
+  const userPrompt = buildPrompt(changes, context, config);
   const systemPrompt = 'You write succinct Git commit message subjects. Output exactly three lines as requested. Do not include explanations, markdown blocks, or quotes.';
 
   const text = await callLlmApi(config, { systemPrompt, userPrompt });

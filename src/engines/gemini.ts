@@ -8,7 +8,7 @@ export async function generateWithGemini(
   config: Config
 ): Promise<string[]> {
   const context = buildContext(changes);
-  const userPrompt = buildPrompt(changes, context);
+  const userPrompt = buildPrompt(changes, context, config);
 
   // Gemini works well with the full prompt in the user message
   const text = await callLlmApi(config, { userPrompt });

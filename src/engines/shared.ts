@@ -1,4 +1,5 @@
 import type { StagedChanges } from '../git.js';
+import type { Config } from '../config.js';
 import { capitalizeFirst } from './heuristic.js';
 
 export function buildContext(changes: StagedChanges): string {
@@ -32,20 +33,39 @@ export function buildContext(changes: StagedChanges): string {
   return parts.join('\n');
 }
 
-export function buildPrompt(changes: StagedChanges, context: string): string {
+export function buildPrompt(changes: StagedChanges, context: string, config: Config): string {
+  const maxLen = config.maxLen || 72;
+  let styleInstruction = '';
+
+  switch (config.style) {
+    case 'plain':
+      styleInstruction = 'Generate 3 distinct commit message subjects in plain imperative format (no type prefix, no emojis).';
+      break;
+    case 'gitmoji':
+      styleInstruction = 'Generate 3 distinct commit message subjects in Gitmoji format (start with an emoji representing the change type).';
+      break;
+    case 'conv':
+      styleInstruction = 'Generate 3 distinct commit message subjects in Conventional Commits format (type(scope): subject).';
+      break;
+    case 'mix':
+    default:
+      styleInstruction = `Generate exactly 3 different commit message subjects (one per line):
+        1. Conventional Commits format (type(scope): subject)
+        2. Plain imperative format (no type prefix)
+        3. Gitmoji format (emoji + subject)`;
+      break;
+  }
+
   return `Repo: ${changes.repoName}
     Branch: ${changes.branch}
 
     Staged changes:
     ${context}
 
-    Generate exactly 3 different commit message subjects (one per line):
-    1. Conventional Commits format (type(scope): subject)
-    2. Plain imperative format (no type prefix)
-    3. Gitmoji format (emoji + subject)
+    ${styleInstruction}
 
     Rules:
-    - Max 72 characters per line
+    - Max ${maxLen} characters per line
     - Imperative mood (add, fix, update - not added, fixed, updated)
     - No trailing period
     - No quotes around the messages
