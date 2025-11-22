@@ -222,6 +222,8 @@ program
       // Load config (merges with CLI options)
       const config = await loadConfig(options);
 
+      await showUpdateNotification();
+
       // Release mode: bump version, update changelog, create tag, then exit
       if (options.release) {
         const { runRelease } = await import("./release.js");
@@ -264,8 +266,6 @@ program
               p.note("package.json version updated", "Package");
           }
 
-          await showUpdateNotification();
-
           p.outro(
             pc.green(config.dryRun ? "Dry run complete" : "Release complete")
           );
@@ -307,7 +307,7 @@ program
           } else {
             p.note(`Path: ${result.path}`, "Changelog");
           }
-          await showUpdateNotification();
+
           p.outro(pc.green("Done"));
           process.exit(0);
         } catch (err: any) {
@@ -329,7 +329,6 @@ program
           "Stage your changes first: " + pc.cyan("git add <files>"),
           "Nothing to commit"
         );
-        await showUpdateNotification();
         p.outro(pc.yellow("Exiting..."));
         process.exit(0);
       }
@@ -407,7 +406,6 @@ program
         );
 
         if (action === "quit") {
-          await showUpdateNotification();
           p.outro(pc.yellow("Cancelled"));
           process.exit(0);
         }
@@ -457,7 +455,6 @@ program
 
         if (config.dryRun) {
           p.note(trimmedMessage, "Would commit with:");
-          await showUpdateNotification();
           p.outro(pc.green("Dry run complete"));
           process.exit(0);
         }
@@ -467,7 +464,6 @@ program
         await commitWithMessage(trimmedMessage);
         commit.stop("Committed successfully");
 
-        await showUpdateNotification();
         p.outro(pc.green("✓ Done!"));
         running = false;
       }
