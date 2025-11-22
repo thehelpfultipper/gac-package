@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.0.12 - 2025-11-22
+
+[Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.11...v1.0.12)
+
+### Fixed
+- Fix pkg
+
+### Documentation
+- Update docs and dependencies and document v1.0.11 - 2025-11-20
+
+### Other
+- Check for updates before operations start
+
 ## v1.0.11 - 2025-11-20
 
 [Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.10...v1.0.11)
