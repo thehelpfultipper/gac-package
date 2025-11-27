@@ -8,6 +8,7 @@ interface ExtractedEntities {
   variables: string[];
   dependencies: string[];
   removedDependencies: string[];
+  cliOptions: string[];
   hasErrorHandling: boolean;
 }
 
@@ -47,6 +48,7 @@ function extractKeyEntities(diff: string, files: any[]): ExtractedEntities {
     variables: new Set<string>(),
     dependencies: new Set<string>(),
     removedDependencies: new Set<string>(),
+    cliOptions: new Set<string>(),
   };
   let hasErrorHandling = false;
 
@@ -63,12 +65,17 @@ function extractKeyEntities(diff: string, files: any[]): ExtractedEntities {
     pyFunction: /^\+\s*def\s+([a-zA-Z0-9_]+)/,
     pyClass: /^\+\s*class\s+([a-zA-Z0-9_]+)/,
     errorHandling: /^\+\s*.*\b(try\s*\{|catch\s*\(|throw\s+new\s+Error)/,
+    cliOption: /^\+\s*\.option\s*\(\s*['"`](?:-[a-zA-Z],\s*)?(--[a-zA-Z0-9-]+)/,
   };
 
   for (const line of lines) {
     let match;
     if ((match = line.match(patterns.component))) {
       entities.components.add(match[1] || match[2]);
+      continue;
+    }
+    if ((match = line.match(patterns.cliOption))) {
+      entities.cliOptions.add(match[1]);
       continue;
     }
     if ((match = line.match(patterns.function))) {
@@ -143,6 +150,7 @@ function extractKeyEntities(diff: string, files: any[]): ExtractedEntities {
     variables: Array.from(entities.variables),
     dependencies: Array.from(entities.dependencies),
     removedDependencies: Array.from(entities.removedDependencies),
+    cliOptions: Array.from(entities.cliOptions),
     hasErrorHandling,
   };
 }
@@ -491,6 +499,7 @@ function buildIntelligentSubject(
       ),
     };
   }
+
   if (entities.removedDependencies.length > 0) {
     return {
       verb: "remove",
@@ -499,6 +508,13 @@ function buildIntelligentSubject(
         "dependency",
         "dependencies"
       ),
+    };
+  }
+
+  if (entities.cliOptions.length > 0) {
+    return {
+      verb: "add",
+      noun: `${formatEntityList(entities.cliOptions, "flag", "flags")} support`,
     };
   }
 
@@ -618,8 +634,8 @@ function detectChangeType(
     entities.removedDependencies.length > 0
   )
     return "chore";
+  if (entities.cliOptions.length > 0) return "feat";
   if (primaryFocus.focus.includes("refactor")) return "refactor";
-  if (entities.hasErrorHandling) return "fix";
 
   const hasNewEntities =
     entities.functions.length > 0 ||
@@ -630,6 +646,7 @@ function detectChangeType(
 
   if (/\b(fix|bug|issue|patch|resolve[sd]?|correct)\b/i.test(diff))
     return "fix";
+  if (entities.hasErrorHandling) return "fix";
   if (files.some((f) => /\.test\.|_test\.|spec\.|__tests__/.test(f.path)))
     return "test";
   if (/\b(refactor|restructure|cleanup|simplify)\b/i.test(diff))
