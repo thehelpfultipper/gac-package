@@ -152,3 +152,7 @@ function summarizeFileDiff(diff: string, path: string): string {
 export async function commitWithMessage(message: string): Promise<void> {
   await execa('git', ['commit', '-m', message]);
 }
+
+export async function stageAllTrackedFiles(): Promise<void> {
+  await execa('git', ['add', '-u']);
+}

@@ -139,6 +139,7 @@ program
   .description("Smart, succinct Git commit messages")
   .version(pkg.version)
   .showSuggestionAfterError()
+  .option("-a, --all", "Automatically stage all tracked modified/deleted files")
   .option("--prefix <text>", 'Prefix for commit message (e.g., "JIRA-123: ")')
   // Do not set defaults here; loadConfig provides defaults and merges with .gacrc/env
   .option("--style <type>", "Message style: plain|conv|gitmoji|mix")
@@ -176,6 +177,7 @@ program
     `
     Examples:
       $ gac                          # Generate commit message using default settings
+      $ gac -a                       # Stage all tracked files and commit
       $ gac --style conv             # Generate a Conventional Commits style message
       $ gac --engine none            # Use the non-AI heuristic engine for instant results
       $ gac --prefix "TICKET-42: "   # Add a prefix to the commit message
@@ -223,6 +225,20 @@ program
       const config = await loadConfig(options);
 
       await showUpdateNotification();
+
+      // Handle --all/-a flag to stage files
+      if (options.all) {
+        const { stageAllTrackedFiles } = await import("./git.js");
+        const s = p.spinner();
+        s.start("Staging tracked files");
+        try {
+          await stageAllTrackedFiles();
+          s.stop("Staged tracked files");
+        } catch (err) {
+          s.stop("Failed to stage files");
+          p.log.warn("Could not stage files automatically. Proceeding with currently staged files.");
+        }
+      }
 
       // Release mode: bump version, update changelog, create tag, then exit
       if (options.release) {
@@ -326,7 +342,8 @@ program
       if (!changes.hasStagedFiles) {
         s.stop("No staged changes found");
         p.note(
-          "Stage your changes first: " + pc.cyan("git add <files>"),
+          "Stage your changes first: " + pc.cyan("git add <files>") + "\n" +
+          "Or use " + pc.cyan("gac -a") + " to stage all tracked files.",
           "Nothing to commit"
         );
         p.outro(pc.yellow("Exiting..."));
