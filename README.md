@@ -14,10 +14,12 @@ npm install -g @thehelpfultipper/gac
 
 # Or try without installing
 npx @thehelpfultipper/gac
+
+# Initialize configuration (optional)
+gac init
 ```
 
-> [!IMPORTANT]
-> **Update Required for Notifications**
+> [!IMPORTANT] > **Update Required for Notifications**
 >
 > Version 1.0.6 introduces automatic update checks. If you installed `gac` before this version, you **must** update to at least this version if not newer to receive future notifications:
 >
@@ -52,6 +54,7 @@ gac
 
 ```bash
 gac                          # Uses Ollama (default), auto-falls back to heuristic
+gac init                     # Interactively create .gacrc configuration
 gac --engine none            # Force heuristic mode (no LLM)
 gac --engine ollama          # Explicitly use Ollama
 gac --dry-run                # Preview without committing
@@ -239,6 +242,14 @@ The Anthropic engine is not implemented yet in this version.
 Use `--engine ollama` or `--engine none` instead.
 
 ## Configuration
+
+### Automatic Configuration
+
+Run the init command to create a `.gacrc` file interactively:
+
+```bash
+gac init
+```
 
 ### Option 1: `.gacrc` file
 

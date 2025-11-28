@@ -177,6 +177,7 @@ program
     `
     Examples:
       $ gac                          # Generate commit message using default settings
+      $ gac init                     # Interactively create a .gacrc config file
       $ gac -a                       # Stage all tracked files and commit
       $ gac --style conv             # Generate a Conventional Commits style message
       $ gac --engine none            # Use the non-AI heuristic engine for instant results
@@ -184,340 +185,360 @@ program
       $ gac --release --bump minor   # Create a new minor release (e.g., v1.1.0 -> v1.2.0)
       $ gac --changelog --dry-run    # Preview changelog without writing files or tagging
   `
-  )
-  .action(async (options, command) => {
-    // Check for unknown commands/arguments.
-    if (command.args.length > 0) {
-        p.log.error(`Unknown command: "${command.args[0]}"`);
-        p.outro(`For a full list of options, run ${pc.cyan("gac --help")}`);
-        process.exit(1);
+  );
+// Register init command
+program
+  .command("init")
+  .description("Interactively create a .gacrc configuration file")
+  .action(async () => {
+    const { runInit } = await import("./init.js");
+    await runInit();
+    process.exit(0);
+  });
+
+// Main action handler
+program.action(async (options, command) => {
+  // Check for unknown commands/arguments.
+  if (command.args.length > 0) {
+    p.log.error(`Unknown command: "${command.args[0]}"`);
+    p.outro(`For a full list of options, run ${pc.cyan("gac --help")}`);
+    process.exit(1);
+  }
+
+  console.clear();
+  p.intro(pc.bgCyan(pc.black(" gac ")));
+
+  // Start update check in the background. We'll await it before exiting.
+  const updateCheckPromise = Promise.race([
+    updateCheck(pkg).catch(() => null),
+    new Promise((resolve) => setTimeout(() => resolve(null), 2000)), // 2s timeout
+  ]);
+
+  const showUpdateNotification = async () => {
+    try {
+      const update = (await updateCheckPromise) as any;
+      if (update && update.latest && pkg.version !== update.latest) {
+        const { latest } = update;
+        const { version: current, name } = pkg;
+        const message = [
+          pc.yellow("Update available!"),
+          pc.gray(`${current} → ${pc.green(latest)}`),
+          `Run ${pc.cyan(`npm i -g ${name}`)} to update`,
+        ].join("\n");
+        p.note(message, "Update");
+      }
+    } catch (error) {
+      // Ignore errors from update check
+    }
+  };
+
+  try {
+    // Load config (merges with CLI options)
+    const config = await loadConfig(options);
+
+    await showUpdateNotification();
+
+    // Handle --all/-a flag to stage files
+    if (options.all) {
+      const { stageAllTrackedFiles } = await import("./git.js");
+      const s = p.spinner();
+      s.start("Staging tracked files");
+      try {
+        await stageAllTrackedFiles();
+        s.stop("Staged tracked files");
+      } catch (err) {
+        s.stop("Failed to stage files");
+        p.log.warn(
+          "Could not stage files automatically. Proceeding with currently staged files."
+        );
+      }
     }
 
-    console.clear();
-    p.intro(pc.bgCyan(pc.black(" gac ")));
-
-    // Start update check in the background. We'll await it before exiting.
-    const updateCheckPromise = Promise.race([
-      updateCheck(pkg).catch(() => null),
-      new Promise((resolve) => setTimeout(() => resolve(null), 2000)), // 2s timeout
-    ]);
-
-    const showUpdateNotification = async () => {
+    // Release mode: bump version, update changelog, create tag, then exit
+    if (options.release) {
+      const { runRelease } = await import("./release.js");
+      const s = p.spinner();
+      s.start("Analyzing commits for release");
       try {
-        const update = (await updateCheckPromise) as any;
-        if (update && update.latest && pkg.version !== update.latest) {
-          const { latest } = update;
-          const { version: current, name } = pkg;
-          const message = [
-            pc.yellow("Update available!"),
-            pc.gray(`${current} → ${pc.green(latest)}`),
-            `Run ${pc.cyan(`npm i -g ${name}`)} to update`,
-          ].join("\n");
-          p.note(message, "Update");
+        const bumpLevel =
+          typeof options.bump === "string"
+            ? String(options.bump).toLowerCase()
+            : undefined;
+        const bumpOverride =
+          bumpLevel === "major" ||
+          bumpLevel === "minor" ||
+          bumpLevel === "patch"
+            ? bumpLevel
+            : undefined;
+        const result = await runRelease({
+          config,
+          updatePkg: !!options.updatePkg,
+          dryRun: !!config.dryRun,
+          bumpOverride,
+          releaseAs: options["releaseAs"],
+          sinceRef: options.since || null,
+        });
+        s.stop("Release plan ready");
+
+        const summary: string[] = [];
+        summary.push(`Base: ${result.baseRef ?? "none"}`);
+        summary.push(`Bump: ${result.bump}`);
+        summary.push(`Next: ${pc.bold(result.nextVersion)}`);
+        p.note(summary.join("\n"), "Release");
+
+        if (result.preview) {
+          p.log.message(result.preview);
         }
-      } catch (error) {
-        // Ignore errors from update check
+
+        if (!config.dryRun) {
+          p.note(`Tag created: ${result.tagCreated ? "yes" : "no"}`, "Tag");
+          if (options.updatePkg)
+            p.note("package.json version updated", "Package");
+        }
+
+        p.outro(
+          pc.green(config.dryRun ? "Dry run complete" : "Release complete")
+        );
+        process.exit(0);
+      } catch (err: any) {
+        s.stop("Failed to create release");
+        p.outro(pc.red(err?.message || String(err)));
+        process.exit(1);
+      }
+    }
+
+    // Changelog mode: generate or update CHANGELOG and exit
+    if (options.changelog !== undefined) {
+      const { upsertChangelog } = await import("./changelog.js");
+      const s = p.spinner();
+      s.start("Generating changelog");
+      try {
+        const emptySinceToNull = (val: any) =>
+          typeof val === "string" && val.trim() === "" ? null : val;
+        const result = await upsertChangelog({
+          config,
+          versionLabel:
+            typeof options.changelog === "string"
+              ? options.changelog
+              : undefined,
+          dryRun: !!config.dryRun,
+          path: options.changelogPath || config.changelogPath,
+          // Allow forcing full history via --since ""
+          sinceRef:
+            emptySinceToNull(options.since) ??
+            emptySinceToNull(config.changelogSince) ??
+            undefined,
+        });
+        s.stop(result.written ? `Updated ${result.path}` : "Changelog preview");
+        if (result.preview) {
+          p.log.message(result.preview);
+        } else {
+          p.note(`Path: ${result.path}`, "Changelog");
+        }
+
+        p.outro(pc.green("Done"));
+        process.exit(0);
+      } catch (err: any) {
+        s.stop("Failed to generate changelog");
+        p.outro(pc.red(err?.message || String(err)));
+        process.exit(1);
+      }
+    }
+
+    // Get staged changes
+    const s = p.spinner();
+    s.start("Analyzing staged changes");
+
+    const changes = await getStagedChanges();
+
+    if (!changes.hasStagedFiles) {
+      s.stop("No staged changes found");
+      p.note(
+        "Stage your changes first: " +
+          pc.cyan("git add <files>") +
+          "\n" +
+          "Or use " +
+          pc.cyan("gac -a") +
+          " to stage all tracked files.",
+        "Nothing to commit"
+      );
+      p.outro(pc.yellow("Exiting..."));
+      process.exit(0);
+    }
+
+    s.stop(`Found changes in ${changes.fileCount} file(s)`);
+
+    // Generate candidates
+    let candidates: string[] = [];
+    let currentEngine = config.engine;
+    let regen = 0;
+
+    const generateNew = async () => {
+      const gen = p.spinner();
+      gen.start(`Generating with ${currentEngine}`);
+
+      try {
+        // Pass deterministic regen counter for variation
+        config.regen = regen;
+        candidates = await generateCandidates(changes, config);
+        gen.stop("Generated 3 options");
+      } catch (err) {
+        if (currentEngine === "ollama") {
+          gen.stop("Ollama unavailable, using heuristic fallback");
+          currentEngine = "none";
+          config.engine = "none";
+          config.regen = regen;
+          candidates = await generateCandidates(changes, config);
+        } else {
+          throw err;
+        }
       }
     };
 
-    try {
-      // Load config (merges with CLI options)
-      const config = await loadConfig(options);
+    await generateNew();
 
-      await showUpdateNotification();
+    // Interactive selection loop
+    let prefix = config.prefix || "";
+    let running = true;
 
-      // Handle --all/-a flag to stage files
-      if (options.all) {
-        const { stageAllTrackedFiles } = await import("./git.js");
-        const s = p.spinner();
-        s.start("Staging tracked files");
-        try {
-          await stageAllTrackedFiles();
-          s.stop("Staged tracked files");
-        } catch (err) {
-          s.stop("Failed to stage files");
-          p.log.warn("Could not stage files automatically. Proceeding with currently staged files.");
-        }
-      }
+    while (running) {
+      const maxLen =
+        typeof config.maxLen === "number" && config.maxLen > 0
+          ? config.maxLen
+          : 72;
 
-      // Release mode: bump version, update changelog, create tag, then exit
-      if (options.release) {
-        const { runRelease } = await import("./release.js");
-        const s = p.spinner();
-        s.start("Analyzing commits for release");
-        try {
-          const bumpLevel =
-            typeof options.bump === "string"
-              ? String(options.bump).toLowerCase()
-              : undefined;
-          const bumpOverride =
-            bumpLevel === "major" ||
-            bumpLevel === "minor" ||
-            bumpLevel === "patch"
-              ? bumpLevel
-              : undefined;
-          const result = await runRelease({
-            config,
-            updatePkg: !!options.updatePkg,
-            dryRun: !!config.dryRun,
-            bumpOverride,
-            releaseAs: options["releaseAs"],
-            sinceRef: options.since || null,
-          });
-          s.stop("Release plan ready");
+      const candidateOptions = candidates.map((msg, i) => {
+        const full = prefix + msg;
+        const len = full.length;
+        const indicator = len <= maxLen ? pc.green("✓") : pc.yellow("⚠");
+        const label = `${indicator} ${i + 1}. ${pc.bold(full)}`;
+        const hint = `(${len}/${maxLen} chars)`;
+        return { value: full, label, hint };
+      });
 
-          const summary: string[] = [];
-          summary.push(`Base: ${result.baseRef ?? "none"}`);
-          summary.push(`Bump: ${result.bump}`);
-          summary.push(`Next: ${pc.bold(result.nextVersion)}`);
-          p.note(summary.join("\n"), "Release");
+      const action = await selectWithShortcuts(
+        [
+          ...candidateOptions,
+          {
+            value: "regenerate",
+            label: pc.cyan("↻ Regenerate new options"),
+            hint: "(r)",
+          },
+          {
+            value: "prefix",
+            label: pc.magenta("✎ Set/change prefix"),
+            hint: "(p)",
+          },
+          {
+            value: "quit",
+            label: pc.red("✕ Quit without committing"),
+            hint: "(q)",
+          },
+        ],
+        candidateOptions
+      );
 
-          if (result.preview) {
-            p.log.message(result.preview);
-          }
-
-          if (!config.dryRun) {
-            p.note(`Tag created: ${result.tagCreated ? "yes" : "no"}`, "Tag");
-            if (options.updatePkg)
-              p.note("package.json version updated", "Package");
-          }
-
-          p.outro(
-            pc.green(config.dryRun ? "Dry run complete" : "Release complete")
-          );
-          process.exit(0);
-        } catch (err: any) {
-          s.stop("Failed to create release");
-          p.outro(pc.red(err?.message || String(err)));
-          process.exit(1);
-        }
-      }
-
-      // Changelog mode: generate or update CHANGELOG and exit
-      if (options.changelog !== undefined) {
-        const { upsertChangelog } = await import("./changelog.js");
-        const s = p.spinner();
-        s.start("Generating changelog");
-        try {
-          const emptySinceToNull = (val: any) =>
-            typeof val === "string" && val.trim() === "" ? null : val;
-          const result = await upsertChangelog({
-            config,
-            versionLabel:
-              typeof options.changelog === "string"
-                ? options.changelog
-                : undefined,
-            dryRun: !!config.dryRun,
-            path: options.changelogPath || config.changelogPath,
-            // Allow forcing full history via --since ""
-            sinceRef:
-              emptySinceToNull(options.since) ??
-              emptySinceToNull(config.changelogSince) ??
-              undefined,
-          });
-          s.stop(
-            result.written ? `Updated ${result.path}` : "Changelog preview"
-          );
-          if (result.preview) {
-            p.log.message(result.preview);
-          } else {
-            p.note(`Path: ${result.path}`, "Changelog");
-          }
-
-          p.outro(pc.green("Done"));
-          process.exit(0);
-        } catch (err: any) {
-          s.stop("Failed to generate changelog");
-          p.outro(pc.red(err?.message || String(err)));
-          process.exit(1);
-        }
-      }
-
-      // Get staged changes
-      const s = p.spinner();
-      s.start("Analyzing staged changes");
-
-      const changes = await getStagedChanges();
-
-      if (!changes.hasStagedFiles) {
-        s.stop("No staged changes found");
-        p.note(
-          "Stage your changes first: " + pc.cyan("git add <files>") + "\n" +
-          "Or use " + pc.cyan("gac -a") + " to stage all tracked files.",
-          "Nothing to commit"
-        );
-        p.outro(pc.yellow("Exiting..."));
+      if (action === "quit") {
+        p.outro(pc.yellow("Cancelled"));
         process.exit(0);
       }
 
-      s.stop(`Found changes in ${changes.fileCount} file(s)`);
-
-      // Generate candidates
-      let candidates: string[] = [];
-      let currentEngine = config.engine;
-      let regen = 0;
-
-      const generateNew = async () => {
-        const gen = p.spinner();
-        gen.start(`Generating with ${currentEngine}`);
-
-        try {
-          // Pass deterministic regen counter for variation
-          config.regen = regen;
-          candidates = await generateCandidates(changes, config);
-          gen.stop("Generated 3 options");
-        } catch (err) {
-          if (currentEngine === "ollama") {
-            gen.stop("Ollama unavailable, using heuristic fallback");
-            currentEngine = "none";
-            config.engine = "none";
-            config.regen = regen;
-            candidates = await generateCandidates(changes, config);
-          } else {
-            throw err;
-          }
-        }
-      };
-
-      await generateNew();
-
-      // Interactive selection loop
-      let prefix = config.prefix || "";
-      let running = true;
-
-      while (running) {
-        const maxLen =
-          typeof config.maxLen === "number" && config.maxLen > 0
-            ? config.maxLen
-            : 72;
-
-        const candidateOptions = candidates.map((msg, i) => {
-          const full = prefix + msg;
-          const len = full.length;
-          const indicator = len <= maxLen ? pc.green("✓") : pc.yellow("⚠");
-          const label = `${indicator} ${i + 1}. ${pc.bold(full)}`;
-          const hint = `(${len}/${maxLen} chars)`;
-          return { value: full, label, hint };
-        });
-
-        const action = await selectWithShortcuts(
-          [
-            ...candidateOptions,
-            {
-              value: "regenerate",
-              label: pc.cyan("↻ Regenerate new options"),
-              hint: "(r)",
-            },
-            {
-              value: "prefix",
-              label: pc.magenta("✎ Set/change prefix"),
-              hint: "(p)",
-            },
-            {
-              value: "quit",
-              label: pc.red("✕ Quit without committing"),
-              hint: "(q)",
-            },
-          ],
-          candidateOptions
-        );
-
-        if (action === "quit") {
-          p.outro(pc.yellow("Cancelled"));
-          process.exit(0);
-        }
-
-        if (action === "regenerate") {
-          regen += 1;
-          await generateNew();
-          continue;
-        }
-
-        if (action === "prefix") {
-          const newPrefix = await p.text({
-            message: "Enter prefix (leave empty to clear):",
-            placeholder: "JIRA-123: ",
-            initialValue: prefix,
-          });
-
-          if (p.isCancel(newPrefix)) continue;
-          prefix = newPrefix.toString().trim();
-          if (prefix && !prefix.endsWith(" ") && !prefix.endsWith(":")) {
-            prefix += ": ";
-          }
-          continue;
-        }
-
-        // A commit message was selected, now allow editing.
-        // The value from p.select is the message string itself.
-        const selectedMessage = String(action);
-
-        const finalMessage = await p.text({
-          message: `Edit commit message ${pc.dim(
-            "(Enter to commit, Ctrl+C to go back)"
-          )}`,
-          initialValue: selectedMessage,
-          validate(value) {
-            if (value.trim().length === 0)
-              return "Commit message cannot be empty.";
-          },
-        });
-
-        if (p.isCancel(finalMessage)) {
-          // User pressed Esc, go back to selection.
-          continue;
-        }
-
-        const trimmedMessage = String(finalMessage).trim();
-
-        if (config.dryRun) {
-          p.note(trimmedMessage, "Would commit with:");
-          p.outro(pc.green("Dry run complete"));
-          process.exit(0);
-        }
-
-        const commit = p.spinner();
-        commit.start("Committing");
-        await commitWithMessage(trimmedMessage);
-        commit.stop("Committed successfully");
-
-        p.outro(pc.green("✓ Done!"));
-        running = false;
+      if (action === "regenerate") {
+        regen += 1;
+        await generateNew();
+        continue;
       }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      p.log.error(pc.red(`Error: ${msg}`));
-      p.outro(pc.red("Failed"));
-      process.exit(1);
+
+      if (action === "prefix") {
+        const newPrefix = await p.text({
+          message: "Enter prefix (leave empty to clear):",
+          placeholder: "JIRA-123: ",
+          initialValue: prefix,
+        });
+
+        if (p.isCancel(newPrefix)) continue;
+        prefix = newPrefix.toString().trim();
+        if (prefix && !prefix.endsWith(" ") && !prefix.endsWith(":")) {
+          prefix += ": ";
+        }
+        continue;
+      }
+
+      // A commit message was selected, now allow editing.
+      // The value from p.select is the message string itself.
+      const selectedMessage = String(action);
+
+      const finalMessage = await p.text({
+        message: `Edit commit message ${pc.dim(
+          "(Enter to commit, Ctrl+C to go back)"
+        )}`,
+        initialValue: selectedMessage,
+        validate(value) {
+          if (value.trim().length === 0)
+            return "Commit message cannot be empty.";
+        },
+      });
+
+      if (p.isCancel(finalMessage)) {
+        // User pressed Esc, go back to selection.
+        continue;
+      }
+
+      const trimmedMessage = String(finalMessage).trim();
+
+      if (config.dryRun) {
+        p.note(trimmedMessage, "Would commit with:");
+        p.outro(pc.green("Dry run complete"));
+        process.exit(0);
+      }
+
+      const commit = p.spinner();
+      commit.start("Committing");
+      await commitWithMessage(trimmedMessage);
+      commit.stop("Committed successfully");
+
+      p.outro(pc.green("✓ Done!"));
+      running = false;
     }
-  });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    p.log.error(pc.red(`Error: ${msg}`));
+    p.outro(pc.red("Failed"));
+    process.exit(1);
+  }
+});
 
 // Pre-process arguments to handle single-dash long options and typos
 const rawArgs = process.argv.slice(2);
 const correctedArgs: string[] = [];
-const knownLongOpts = program.options.map(opt => opt.long).filter(Boolean);
+const knownLongOpts = program.options.map((opt) => opt.long).filter(Boolean);
 
 for (const arg of rawArgs) {
-    // Check for arguments that look like single-dash long options (e.g., "-changelog").
-    // Standard short options (-h) or negative numbers (-10) are ignored.
-    if (arg.startsWith('-') && !arg.startsWith('--') && arg.length > 2 && isNaN(parseFloat(arg))) {
-        const potentialLongOpt = '--' + arg.slice(1);
-        
-        // Case 1: Auto-correct if it's a known long option with a single dash.
-        if (knownLongOpts.includes(potentialLongOpt)) {
-            correctedArgs.push(potentialLongOpt);
-            continue;
-        }
+  // Check for arguments that look like single-dash long options (e.g., "-changelog").
+  // Standard short options (-h) or negative numbers (-10) are ignored.
+  if (
+    arg.startsWith("-") &&
+    !arg.startsWith("--") &&
+    arg.length > 2 &&
+    isNaN(parseFloat(arg))
+  ) {
+    const potentialLongOpt = "--" + arg.slice(1);
 
-        // Case 2: It's a typo. Show a helpful error and exit.
-        // This prevents commander from misinterpreting "-changelog" as "-c -h -a..."
-        p.log.error(`Unknown option: "${arg}"`);
-        p.outro(`For a full list of options, run ${pc.cyan("gac --help")}`);
-        process.exit(1);
+    // Case 1: Auto-correct if it's a known long option with a single dash.
+    if (knownLongOpts.includes(potentialLongOpt)) {
+      correctedArgs.push(potentialLongOpt);
+      continue;
     }
-    
-    // Argument is not a single-dash long option, so pass it through.
-    correctedArgs.push(arg);
+
+    // Case 2: It's a typo. Show a helpful error and exit.
+    // This prevents commander from misinterpreting "-changelog" as "-c -h -a..."
+    p.log.error(`Unknown option: "${arg}"`);
+    p.outro(`For a full list of options, run ${pc.cyan("gac --help")}`);
+    process.exit(1);
+  }
+
+  // Argument is not a single-dash long option, so pass it through.
+  correctedArgs.push(arg);
 }
 
 program.parse([process.argv[0], process.argv[1], ...correctedArgs]);
