@@ -33,10 +33,11 @@ gac init
 # Stage your changes
 git add .
 
-# Run gac (uses Ollama by default, falls back to heuristic if unavailable)
+# Run gac
 gac
 
-# That's it! Choose an option, edit if needed, and commit.
+# OR stage all tracked changes automatically
+gac -a
 ```
 
 ## Features
@@ -55,6 +56,7 @@ gac
 ```bash
 gac                          # Uses Ollama (default), auto-falls back to heuristic
 gac init                     # Interactively create .gacrc configuration
+gac -a                       # Stage all tracked files and generate message
 gac --engine none            # Force heuristic mode (no LLM)
 gac --engine ollama          # Explicitly use Ollama
 gac --dry-run                # Preview without committing
@@ -150,6 +152,7 @@ gac --max-len 100    # Longer messages (not recommended)
 
 | Flag                      | Description                                                | Default                         |
 | ------------------------- | ---------------------------------------------------------- | ------------------------------- |
+| `-a, --all`             | Automatically stage all tracked modified/deleted files           | `false`                        |
 | `--style <type>`          | Message style: `plain`, `conv`, `gitmoji`, or `mix`        | `mix`                           |
 | `--engine <name>`         | Engine: `ollama`, `openai`, `gemini`, or `none`            | `ollama`                        |
 | `--model <name>`          | Model name (for Ollama, OpenAI, or Gemini)                 | `mistral:7b`                    |
