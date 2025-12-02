@@ -43,7 +43,7 @@ export async function runInit() {
 
         let defaultModel = "mistral:7b";
         if (results.engine === "openai") defaultModel = "gpt-4o-mini";
-        if (results.engine === "gemini") defaultModel = "gemini-1.5-flash";
+        if (results.engine === 'gemini') defaultModel = 'gemini-2.5-flash';
 
         return p.text({
           message: "Enter model name:",

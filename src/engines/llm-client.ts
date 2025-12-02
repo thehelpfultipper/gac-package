@@ -103,7 +103,7 @@ async function callGemini(config: Config, payload: LlmPayload): Promise<string> 
     const apiKey = config.geminiApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!apiKey) throw new Error('GEMINI_API_KEY or GOOGLE_API_KEY not found.');
 
-    const modelName = config.model && !config.model.includes(':') ? config.model : 'gemini-1.5-flash';
+    const modelName = config.model && !config.model.includes(':') ? config.model : 'gemini-2.5-flash';
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
     const contents = [{ role: 'user', parts: [{ text: payload.userPrompt }] }];

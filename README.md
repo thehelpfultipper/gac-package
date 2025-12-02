@@ -321,6 +321,30 @@ Settings are merged in this order (highest priority last):
 gac --model llama3.2:3b  # Uses llama3.2:3b
 ```
 
+## Ignoring Files
+
+Create a `.gacignore` file in your project root to prevent specific files from being analyzed by the AI. 
+
+**Note on `.gitignore` vs `.gacignore`:**
+`gac` only analyzes *staged* files. If a file is already in your `.gitignore`, it usually cannot be staged, so `gac` won't see it anyway. You only need `.gacignore` for files that **are tracked by Git** (and currently staged) but contain "noise" you don't want the AI to process (e.g., massive lockfiles, auto-generated code, or minified assets).
+
+**Example `.gacignore`:**
+```text
+# Lock files (tracked, but huge and noisy for AI)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Auto-generated source files
+src/gql/types.ts
+src/aws-exports.js
+
+# Minified assets (if you commit them)
+public/js/*.min.js
+```
+
+`.gacignore` supports standard glob patterns (like `.gitignore`).
+
 ## Installing Ollama
 
 To use the default Ollama engine (these are bound to change, check website for updated installation instructions):

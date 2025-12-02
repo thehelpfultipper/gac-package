@@ -349,7 +349,7 @@ program.action(async (options, command) => {
     const s = p.spinner();
     s.start("Analyzing staged changes");
 
-    const changes = await getStagedChanges();
+    const changes = await getStagedChanges(config.ignoredFiles);
 
     if (!changes.hasStagedFiles) {
       s.stop("No staged changes found");
