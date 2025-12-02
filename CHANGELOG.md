@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.1.0 - 2025-12-02
+
+[Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.12...v1.1.0)
+
+### Added
+- Introduce gacrc init
+- Add stage and commit flag feature
+
+### Fixed
+- Patch engine scripts for heuristic
+
+### Documentation
+- Update docs and dependencies and document v1.0.12 - 2025-11-22
+
 ## v1.0.12 - 2025-11-22
 
 [Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.11...v1.0.12)
