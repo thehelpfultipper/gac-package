@@ -41,11 +41,27 @@ export async function getStagedChanges(
   }
 
   // Get branch name
-  const { stdout: branch } = await execa("git", [
-    "rev-parse",
-    "--abbrev-ref",
-    "HEAD",
-  ]);
+  let branch = "";
+  try {
+    const { stdout } = await execa("git", [
+      "rev-parse",
+      "--abbrev-ref",
+      "HEAD",
+    ]);
+    branch = stdout.trim();
+  } catch {
+    // If this fails (e.g. empty repo with no commits), try getting the symbolic ref (unborn branch)
+    try {
+      const { stdout } = await execa("git", [
+        "symbolic-ref",
+        "--short",
+        "HEAD",
+      ]);
+      branch = stdout.trim();
+    } catch {
+      branch = "HEAD";
+    }
+  }
 
   // Get repo name
   let repoName = "repo";
@@ -59,11 +75,16 @@ export async function getStagedChanges(
     if (match) repoName = match[1];
   } catch {
     // No remote, use directory name
-    const { stdout: toplevel } = await execa("git", [
-      "rev-parse",
-      "--show-toplevel",
-    ]);
-    repoName = toplevel.split("/").pop() || "repo";
+    try {
+      const { stdout: toplevel } = await execa("git", [
+        "rev-parse",
+        "--show-toplevel",
+      ]);
+      repoName = toplevel.split("/").pop() || "repo";
+    } catch {
+      // Fallback if rev-parse fails
+      repoName = "repo";
+    }
   }
 
   // Get detailed diff

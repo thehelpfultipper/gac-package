@@ -134,13 +134,6 @@ export GAC_MODEL="llama3.2:3b" && gac
 # Via config file (see Configuration section)
 ```
 
-**Recommended models** (fastest to slowest):
-
-- `llama3.2:3b` - Fastest, great for quick commits
-- `phi3:3.8b` - Fast, good quality
-- `mistral:7b` - Default, balanced speed/quality
-- `llama3.1:8b` - Slower but high quality
-
 ### Length Control
 
 ```bash
