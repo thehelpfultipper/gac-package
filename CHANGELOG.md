@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.2.0 - 2025-12-04
+
+[Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.1.0...v1.2.0)
+
+### Added
+- Introduce scripts, dependencies, and docs for .gacignore
+
+### Fixed
+- Fix scripts and docs
+
+### Documentation
+- Update docs and dependencies and document v1.1.0 - 2025-12-02
+
+### Other
+- Document run gac all flag
+
 ## v1.1.0 - 2025-12-02
 
 [Compare changes](https://github.com/thehelpfultipper/gac-package/compare/v1.0.12...v1.1.0)
